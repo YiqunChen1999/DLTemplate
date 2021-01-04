@@ -26,6 +26,7 @@ def evaluate(
     # TODO  Prepare to log info.
     log_info = print if logger is None else logger.log_info
     # TODO  Read data and evaluate and record info.
+    utils.inference_and_cal_loss(model=model, inp=inp, anno=anno, loss_fn=loss_fn)
     # TODO  Return some info.
     raise NotImplementedError("Function evaluate does not implemented yet.")
 

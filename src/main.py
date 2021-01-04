@@ -7,7 +7,7 @@ Docs    Main functition to run program.
 import sys, os, copy
 import torch, torchvision
 
-# from configs import cfg
+from configs.configs import cfg
 from utils import utils, loss_fn_helper, lr_scheduler_helper, optimizer_helper
 from utils.logger import Logger
 from models import model_builder

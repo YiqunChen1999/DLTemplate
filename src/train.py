@@ -28,5 +28,6 @@ def train_one_epoch(
     # TODO  Prepare to log info.
     log_info = print if logger is None else logger.log_info
     # TODO  Read data and train and record info.
+    utils.inference_and_cal_loss(model=model, inp=inp, anno=anno, loss_fn=loss_fn)
     # TODO  Return some info.
     raise NotImplementedError("Function train_one_epoch does not implemented yet.")

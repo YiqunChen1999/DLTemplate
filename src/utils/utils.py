@@ -38,7 +38,37 @@ def log_info_wrapper(msg, logger=None):
         return wrapped_func
     return func_wraper
 
+def inference_and_cal_loss(model, inp, anno, loss_fn):
+    """
+    Info:
+        Execute inference and calculate loss, sychronize the train and evaluate progress. 
+    Args:
+        - model (nn.Module): model with train or eval mode setted.
+        - inp (dict): organize input data into a dictionary.
+        - anno (FIXME): ground truth, used to calculate loss.
+        - loss_fn (FIXME): calculate loss.
+    Returns:
+        - out (FIXME): the output of the model.
+        - loss (Tensor): calculated loss.
+    """
+    out = model(**inp)
+    loss = loss_fn(out, anno)
+    raise NotImplementedError("Function feed_data_and_cal_loss is not implemented yet, \
+        please rewrite the demo code and delete this error message.")
+    return out, loss
+
+
 def resize(img: torch.Tensor, size: list or tuple, logger=None):
+    """
+    Info:
+        Resize the input image. 
+    Args:
+        - img (torch.Tensor):
+        - size (tuple | int): target size of image.
+        - logger (Logger): record running information, if None, direct message to terminal.
+    Returns:
+        - img (torch.Tensor): image with target size. 
+    """
     org_shape = img.shape
     if len(org_shape) == 2:
         img = img.unsqueeze(0).unsqueeze(0)
