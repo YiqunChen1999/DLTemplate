@@ -57,7 +57,6 @@ def inference_and_cal_loss(model, inp, anno, loss_fn):
         please rewrite the demo code and delete this error message.")
     return out, loss
 
-
 def resize(img: torch.Tensor, size: list or tuple, logger=None):
     """
     Info:
