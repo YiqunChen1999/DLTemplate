@@ -32,14 +32,15 @@ cfg.GENERAL.TEST                                =   True if args.test == "true" 
 # ================================ 
 # MODEL
 # ================================ 
-cfg.MODEL.ARCH                                  =   None
-cfg.MODEL.ENCODER                               =   None
-cfg.MODEL.DECODER                               =   None
+cfg.MODEL.ARCH                                  =   None # TODO
+cfg.MODEL.ENCODER                               =   None # TODO
+cfg.MODEL.DECODER                               =   None # TODO
 
 # ================================ 
 # DATA
 # ================================ 
-cfg.DATA.DIR                                    =   ""
+cfg.DATA.DIR                                    =   "" # TODO
+cfg.DATA.NUMWORKERS                             =   args.batch_size
 
 # ================================ 
 # OPTIMIZER
@@ -58,11 +59,14 @@ cfg.SCHEDULER.SCHEDULER                         =   "Linear"
 cfg.TRAIN.MAX_EPOCH                             =   100
 
 # ================================ 
+# LOSS_FN
+# ================================ 
+cfg.LOSS_FN.LOSS_FN                             =   ""
+
+# ================================ 
 # LOG
 # ================================ 
 cfg.LOG.DIR                                     =   os.path.join(os.path.join(cfg.GENERAL.ROOT, "logs", cfg.GENERAL.ID))
-
-
 
 if cfg.GENERAL.STRICT_ID:
     assert not os.path.exists(cfg.LOG.DIR), "Cannot use same ID in strict mode."
@@ -74,3 +78,5 @@ _paths = [
 for _path in _paths:
     if not os.path.exists(_path):
         os.makedirs(_path)
+
+raise NotImplementedError("Please fully set your configurations and remove this error message.")

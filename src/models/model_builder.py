@@ -10,9 +10,10 @@ sys.path.append(os.path.join(os.getcwd(), "src"))
 import torch, torchvision
 from torch import nn
 import torch.nn.functional as F
+
 from utils import utils
-from .encoder import *
-from .decoder import *
+from .encoder import _ENCODER
+from .decoder import _DECODER
 
 
 class Model(nn.Module):

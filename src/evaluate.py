@@ -7,8 +7,10 @@ Docs    Functions to train a model.
 import os, sys
 sys.path.append(os.path.join(sys.path[0], ".."))
 sys.path.append(os.path.join(os.getcwd(), "src"))
-import torch
+import torch, torchvision
+import torch.nn as nn
 import torch.nn.functional as F
+
 from utils import utils
 
 @utils.log_info_wrapper("Start evaluate model.")

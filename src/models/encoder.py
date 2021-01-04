@@ -11,20 +11,22 @@ import torch, torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import utils
+
 _ENCODER = {}
 
-def add_encoder(_class):
-    _ENCODER[_class.__name__] = _class
-    return _class
+def add_encoder(encoder):
+    _ENCODER[encoder.__name__] = encoder
+    return encoder
 
 @add_encoder
 class ResNet50Encoder(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(ResNet50Encoder, self).__init__()
         self.cfg = cfg
-        self._build_model()
+        self._build()
 
-    def _build_model(self):
+    def _build(self):
         self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet50', pretrained=True)
 
     def forward(self, data, *args, **kwargs):
@@ -37,9 +39,9 @@ class ResNext50Encoder(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(ResNext50Encoder, self).__init__()
         self.cfg = cfg
-        self._build_model()
+        self._build()
 
-    def _build_model(self):
+    def _build(self):
         self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnext50_32x4d', pretrained=True)
 
     def forward(self, data, *args, **kwargs):
@@ -52,9 +54,9 @@ class DeepLabV3Encoder(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(DeepLabV3Encoder, self).__init__()
         self.cfg = cfg
-        self._build_model()
+        self._build()
 
-    def _build_model(self):
+    def _build(self):
         self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnext50_32x4d', pretrained=True).backbone
 
     def forward(self, data, *args, **kwargs):
@@ -67,9 +69,9 @@ class FCNEncoder(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(FCNEncoder, self).__init()
         self.cfg = cfg
-        self._build_model()
+        self._build()
 
-    def _build_model(self):
+    def _build(self):
         self.model = torch.hub.load('pytorch/vision:v0.6.0', 'fcn_resnet101', pretrained=True).backbone
 
     def forward(self, data, *args, **kwargs):
@@ -82,9 +84,9 @@ class UNetEncoder(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(UNetEncoder, self).__init__()
         self.cfg = cfg
-        self._build_model()
+        self._build()
 
-    def _build_model(self):
+    def _build(self):
         model = torch.hub.load(
             'mateuszbuda/brain-segmentation-pytorch', 'unet', 
             in_channels=3, out_channels=1, init_features=32, pretrained=True

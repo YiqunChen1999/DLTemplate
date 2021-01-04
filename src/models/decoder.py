@@ -11,20 +11,22 @@ import torch, torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import utils
+
 _DECODER = {}
 
-def add_decoder(_class):
-    _DECODER[_class.__name__] = _class
-    return _class
+def add_decoder(decoder):
+    _DECODER[decoder.__name__] = decoder
+    return decoder
 
 @add_decoder
 class UNetDecoder(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(UNetDecoder, self).__init__()
         self.cfg = cfg
-        self._build_model()
+        self._build()
 
-    def _build_model(self):
+    def _build(self):
         model = torch.hub.load(
             'mateuszbuda/brain-segmentation-pytorch', 'unet', 
             in_channels=3, out_channels=1, init_features=32, pretrained=True
