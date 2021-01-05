@@ -7,6 +7,10 @@ This is a template for Deep Learning (maybe other projects are also fine).
 
 Just clone this project to your directory and change the project name `Template` to your project name `ProjectName` and fill your code in corresponding file. 
 
+## Issues
+
+This template is not fully tested, there may be some bugs. 
+
 ## Highlight
 
 `utils.utils.log_info` can help record information to both terminal and logfile.
