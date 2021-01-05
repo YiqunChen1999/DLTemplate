@@ -34,4 +34,4 @@ class Model(nn.Module):
 @utils.log_info_wrapper("Build model from configurations.")
 def build_model(cfg, logger=None):
     log_info = print if logger is None else logger.log_info
-    raise NotImplementedError("Function build_model do not implemented yet.")
+    raise NotImplementedError("Function build_model is not implemented yet.")

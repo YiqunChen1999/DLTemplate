@@ -21,6 +21,6 @@ class Logger:
         logging.info(msg)
         msg = "[{:<20}] [{:<8}] {}".format(time.asctime(), "INFO", msg)
         print(msg)
-        raise NotImplementedError("Method Logger.log_info does not implemented yet.")
+        raise NotImplementedError("Method Logger.log_info is not implemented yet.")
 
 

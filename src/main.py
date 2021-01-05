@@ -16,6 +16,8 @@ from train import train_one_epoch
 from evaluate import evaluate
 
 def main():
+    raise NotImplementedError("Function main is not implemented yet, please finish your code and \
+        remove this error message.")
     # TODO Read configuration.
     # TODO Set logger to record information.
     logger = Logger(cfg)
@@ -66,7 +68,7 @@ def main():
             logger=logger,
             save=cfg.SAVE.SAVE,  
         )
-    raise NotImplementedError("Function main do not implemented yet.")
+    return None
 
 
 if __name__ == "__main__":

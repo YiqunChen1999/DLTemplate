@@ -46,4 +46,4 @@ def train_one_epoch(
         lr_scheduler.step()
         pbar.close()
     # TODO  Return some info.
-    raise NotImplementedError("Function train_one_epoch does not implemented yet.")
+    raise NotImplementedError("Function train_one_epoch is not implemented yet.")

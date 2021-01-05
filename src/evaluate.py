@@ -45,5 +45,5 @@ def evaluate(
             pbar.update()
         pbar.close()
     # TODO  Return some info.
-    raise NotImplementedError("Function evaluate does not implemented yet.")
+    raise NotImplementedError("Function evaluate is not implemented yet.")
 

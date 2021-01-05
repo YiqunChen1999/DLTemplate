@@ -53,7 +53,7 @@ def inference_and_cal_loss(model, inp, anno, loss_fn):
     """
     out = model(**inp)
     loss = loss_fn(out, anno)
-    raise NotImplementedError("Function feed_data_and_cal_loss is not implemented yet, \
+    raise NotImplementedError("Function inference_and_cal_loss is not implemented yet, \
         please rewrite the demo code and delete this error message.")
     return out, loss
 
@@ -112,7 +112,7 @@ def pack_code(cfg, logger=None):
         for item in src_items:
             path2src = os.path.join(src_dir, item)
             os.system("cp {} {}/src/Mon{}Day{}Hour{}Min{}".format(path2src, des_dir, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min))
-    raise NotImplementedError("Function pack_code does not implemented yet.")
+    raise NotImplementedError("Function pack_code is not implemented yet.")
 
 
 if __name__ == "__main__":
