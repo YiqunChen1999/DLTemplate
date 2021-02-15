@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Dataset classes.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Dataset classes.
 """
 
 import os, sys

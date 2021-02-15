@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Necessary modules for model.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Necessary modules for model.
 """
 
 import os, sys

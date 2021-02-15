@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Encoder classes.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Encoder classes.
 """
 
 import os, sys

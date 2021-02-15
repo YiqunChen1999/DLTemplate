@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Decoder classes.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Decoder classes.
 """
 
 import os, sys

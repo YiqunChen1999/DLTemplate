@@ -1,10 +1,12 @@
 
-"""
-Author  Yiqun Chen
-Docs    Functions to train a model.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Functions to evaluate a model.
 """
 
-import os, sys
+import os, sys, time
 sys.path.append(os.path.join(sys.path[0], ".."))
 sys.path.append(os.path.join(os.getcwd(), "src"))
 import torch, torchvision
@@ -12,38 +14,59 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from utils import utils
+from utils import utils, metrics
 
-@utils.log_info_wrapper("Start evaluate model.")
-@torch.enable_grad()
+@torch.no_grad()
 def evaluate(
     epoch: int, 
+    cfg, 
     model: torch.nn.Module, 
     data_loader: torch.utils.data.DataLoader, 
     device: torch.device, 
     loss_fn, 
+    metrics_logger, 
+    phase="valid", 
     logger=None, 
     save=False, 
     *args, 
     **kwargs, 
 ):
     model.eval()
-    # TODO  Prepare to log info.
+    # Prepare to log info.
     log_info = print if logger is None else logger.log_info
-    pbar = tqdm(total=len(data_loader))
     total_loss = []
-    # TODO  Read data and evaluate and record info.
-    with utils.log_info(msg="Evaluate at epoch: {}".format(str(epoch).zfill(3)), level="INFO", state=True, logger=logger):
-        log_info("Will{}save results to {}".format(" " if save else " not ", cfg.SAVE.DIR))
-        for idx, data, anno in enumerate(data_loader):
-            out, loss = utils.inference_and_cal_loss(model=model, inp=data, anno=anno, loss_fn=loss_fn)
+    inference_time = []
+    # Read data and evaluate and record info.
+    with utils.log_info(msg="{} at epoch: {}".format(phase.upper(), str(epoch).zfill(3)), level="INFO", state=True, logger=logger):
+        # log_info("Will{}save results to {}".format(" " if save else " not ", cfg.SAVE.DIR))
+        pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
+        for idx, data in enumerate(data_loader):
+            start_time = time.time()
+            out, loss = utils.inference_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device)
+            inference_time.append(time.time()-start_time)
             total_loss.append(loss.detach().cpu().item())
+
             if save:
-                # TODO Save results to directory.
-                pass
-            pbar.set_description("Epoch: {:<3}, loss: {:<5}".format(epoch, sum(total_loss)/len(total_loss)))
+                # Save results to directory.
+                for i in range(out.shape[0]):
+                    save_dir = os.path.join(cfg.SAVE.DIR, phase)
+                    if not os.path.exists(save_dir):
+                        os.makedirs(save_dir)
+                    path2file = os.path.join(save_dir, data["img_idx"][i]+".png")
+                    succeed = utils.save_image(out[i].detach().cpu().numpy(), cfg.DATA.MEAN, cfg.DATA.NORM, path2file)
+                    if not succeed:
+                        log_info("Cannot save image to {}".format(path2file))
+            
+            metrics_logger.record(phase, epoch, "loss", loss.detach().cpu().item())
+            output = out.detach().cpu()
+            target = data["trg"]
+            utils.cal_and_record_metrics(phase, epoch, output, target, metrics_logger, logger=logger)
+
+            pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(epoch, cfg.TRAIN.MAX_EPOCH, round(sum(total_loss)/len(total_loss), 5), round(total_loss[-1], 5)))
             pbar.update()
         pbar.close()
+    log_info("Runtime per image: {:<5} seconds.".format(round(sum(inference_time)/len(inference_time), 4)))
+    mean_metrics = metrics_logger.mean(phase, epoch)
     # TODO  Return some info.
     raise NotImplementedError("Function evaluate is not implemented yet.")
 

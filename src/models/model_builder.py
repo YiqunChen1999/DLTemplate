@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Build model from configurations.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Build model from configurations.
 """
 
 import os, sys

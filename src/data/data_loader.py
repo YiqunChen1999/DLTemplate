@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Help build data loader.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Help build data loader.
 """
 
 import os, sys

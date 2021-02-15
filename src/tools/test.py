@@ -1,7 +1,9 @@
 
-"""
-Author  Yiqun Chen
-Docs    Test modules not model.
+r"""
+Author:
+    Yiqun Chen
+Docs:
+    Test modules not model.
 """
 
 import os, sys
