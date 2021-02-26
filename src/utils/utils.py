@@ -13,6 +13,7 @@ from PIL import Image
 import numpy as np
 import cv2
 
+
 @contextlib.contextmanager
 def log_info(msg="", level="INFO", state=False, logger=None):
     log = print if logger is None else logger.log_info
@@ -22,6 +23,7 @@ def log_info(msg="", level="INFO", state=False, logger=None):
     if state:
         _state = "[{:<8}]".format("DONE") if state else ""
         log("[{:<20}] [{:<8}] {} {}".format(time.asctime(), level, _state, msg))
+
 
 def log_info_wrapper(msg, logger=None):
     r"""
@@ -42,33 +44,95 @@ def log_info_wrapper(msg, logger=None):
         return wrapped_func
     return func_wraper
 
-def cal_ssim_pt(im1, im2, data_range=None, multichannel=True, *args, **kwargs):
-    assert im1.shape == im2.shape, "Shapes of im1 and im2 are not equal."
-    device = kwargs.pop("device", torch.device("cpu"))
-    if len(im1.shape) == 3:
-        im1 = im1.unsqueeze(0)
-        im2 = im2.unsqueeze(0)
-    if im1.shape[-1] == 3:
-        im1 = im1.permute(0, 3, 1, 2)
-        im2 = im2.permute(0, 3, 1, 2)
-    channels = 3 if multichannel else 1
-    win_size = kwargs.pop("win_size", 7)
-    num_pixels = win_size ** 2
-    mean_1 = F.conv2d(im1, torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels)
-    mean_2 = F.conv2d(im2, torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels)
-    var_1 = F.conv2d((im1 ** 2), torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels) - mean_1 ** 2
-    var_2 = F.conv2d((im2 ** 2), torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels) - mean_2 ** 2
-    covar = F.conv2d((im1 * im2), torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels) - mean_1 * mean_2
-    K1 = kwargs.pop("K1", 0.01)
-    K2 = kwargs.pop("K2", 0.03)
-    C1 = (K1 * data_range) ** 2
-    C2 = (K2 * data_range) ** 2
-    ssim = ( (2 * mean_1 * mean_2 + C1) * (2 * covar + C2) ) \
-        / ( (mean_1 ** 2 + mean_2 ** 2 + C1) * (var_1 + var_2 + C2) )
-    mssim = ssim.mean()
-    return mssim
 
-def inference(model, data, device):
+def resize_and_pad(img, resol, is_mask):
+    r"""
+    Info:
+        Resize and pad image with zeros.
+    Args:
+        img (Ndarray | Tensor):
+        resol (list | tuple): [H, W]
+        is_mask (bool):
+    Rets:
+        img (Ndarray | Tensor): the type depends on input img's type.
+    """
+    dim = len(img.shape)
+    org_resol = img.shape[-2: ]
+    scale_factor = min(resol[0]/org_resol[0], resol[1]/org_resol[1])
+    if isinstance(img, np.ndarray):
+        org_type = "Ndarray"
+        img = torch.from_numpy(img)
+    elif isinstance(img, torch.Tensor):
+        org_type = "Tensor"
+    else:
+        raise TypeError("Unexpected img type {}".format(type(img)))
+    img = img.type(torch.float)
+    if dim == 2:
+        img = img.unsqueeze(0).unsqueeze(0)
+    elif dim == 3:
+        img = img.unsqueeze(0)
+    img = F.interpolate(img, scale_factor=scale_factor, recompute_scale_factor=False)
+    if is_mask:
+        max_pix = torch.max(img)
+        img = (img > (max_pix / 2)) * max_pix
+    img_resol = img.shape[-2: ]
+    # TODO Padding.
+    padding_left = (resol[0] - img_resol[0]) // 2
+    padding_right = resol[0] - padding_left
+    padding_top = (resol[1] - img_resol[1]) // 2
+    padding_bottom = resol[1] - padding_top
+    img = F.pad(img, pad=(padding_left, padding_right, padding_top, padding_bottom))
+    if org_type == "Ndarray":
+        img = img.numpy()
+    return img
+
+
+def get_video_spatial_feature(featmap_H, featmap_W):
+    spatial_batch_val = np.zeros((8, featmap_H, featmap_W), dtype=np.float32)
+    for h in range(featmap_H):
+        for w in range(featmap_W):
+            xmin = w / featmap_W * 2 - 1
+            xmax = (w + 1) / featmap_W * 2 - 1
+            xctr = (xmin + xmax) / 2
+            ymin = h / featmap_H * 2 - 1
+            ymax = (h + 1) / featmap_H * 2 - 1
+            yctr = (ymin + ymax) / 2
+            spatial_batch_val[:, h, w] = [xmin, ymin, xmax, ymax, xctr, yctr, 1 / featmap_W, 1 / featmap_H]
+    return spatial_batch_val
+
+
+def get_spatial_feats():
+    spatial_map_s = get_video_spatial_feature(cfg.DATA.VIDEO.RESOLUTION[0][0], cfg.DATA.VIDEO.RESOLUTION[0][1])
+    spatial_map_s = torch.from_numpy(spatial_map_s).unsqueeze(0)
+    spatial_map_s = spatial_map_s.to(device=device)
+    spatial_map_m = get_video_spatial_feature(cfg.DATA.VIDEO.RESOLUTION[1][0], cfg.DATA.VIDEO.RESOLUTION[1][1])
+    spatial_map_m = torch.from_numpy(spatial_map_m).unsqueeze(0)
+    spatial_map_m = spatial_map_m.to(device=device)
+    spatial_map_l = get_video_spatial_feature(cfg.DATA.VIDEO.RESOLUTION[2][0], cfg.DATA.VIDEO.RESOLUTION[2][1])
+    spatial_map_l = torch.from_numpy(spatial_map_l).unsqueeze(0)
+    spatial_map_l = spatial_map_l.to(device=device)
+    spatial_feats = [spatial_map_s, spatial_map_m, spatial_map_l]
+    return spatial_feats
+
+
+def get_coord(mask, normalize=True):
+    shape = mask.shape
+    assert len(shape) == 2, "Two many indices"
+    if torch.sum(mask) == 0:
+        return torch.tensor([0, 0, 1, 1]).unsqueeze(0).type(torch.float32)
+    coord = torch.nonzero(mask)
+    x_min = torch.min(coord[:, 1]).type(torch.float32)
+    x_max = torch.max(coord[:, 1]).type(torch.float32)
+    y_min = torch.min(coord[:, 0]).type(torch.float32)
+    y_max = torch.max(coord[:, 0]).type(torch.float32)
+    x_min /= shape[1]
+    x_max /= shape[1]
+    y_min /= shape[0]
+    y_max /= shape[0]
+    return torch.tensor([x_min, x_max, y_min, y_max]).unsqueeze(0)
+
+
+def inference(model, data, device, *args, **kwargs):
     r"""
     Info:
         Inference once, without calculate any loss.
@@ -79,44 +143,64 @@ def inference(model, data, device):
     Returns:
         - out (Tensor): predicted.
     """
-    def _inference_V1(model, data, device):
-        src = data["src"]
-        src = src.to(device)
-        out = model(src)
-        return out, 
+    def _inference_V1(model, data, device, *args, **kwargs):
+        frames = data[0]
+        batch_size = frames.shape[0]
+        gt_mask_s, gt_mask_m, gt_mask_l, bert = data[1]["mask_s"], data[1]["mask_m"], data[1]["mask_l"], data[1]["bert"]
+        
+        frames, gt_mask_s, gt_mask_m, gt_mask_l, bert = \
+            frames.to(device), gt_mask_s.to(device), gt_mask_m.to(device), gt_mask_l.to(device), bert.to(device)
 
-    raise NotImplementedError("Function utils.inference is not implemented yet.")
-    return _inference_V1(model, data, device) 
+        # mask_s, mask_m, mask_l = model(txt, frames, **kwargs)
+        mask_s, mask_m, mask_l, bbox_s, bbox_m, bbox_l = model(bert, frames, **kwargs)
 
-def inference_and_calc_loss(model, data, loss_fn, device):
+        gt_bbox_s = torch.cat([get_coord(gt_mask_s[i]) for i in range(batch_size)], dim=0).to(device)
+        gt_bbox_m = torch.cat([get_coord(gt_mask_m[i]) for i in range(batch_size)], dim=0).to(device)
+        gt_bbox_l = torch.cat([get_coord(gt_mask_l[i]) for i in range(batch_size)], dim=0).to(device)
+        
+        outputs = {
+            "mask_s": mask_s, "mask_m": mask_m, "mask_l": mask_l, 
+            "bbox_s": bbox_s, "bbox_m": bbox_m, "bbox_l": bbox_l, 
+        }
+        targets = {
+            "gt_mask_s": gt_mask_s, "gt_mask_m": gt_mask_m, "gt_mask_l": gt_mask_l, 
+            "gt_bbox_s": gt_bbox_s, "gt_bbox_m": gt_bbox_m, "gt_bbox_l": gt_bbox_l, 
+        }
+        return outputs, targets
+
+    return _inference_V1(model, data, device, *args, **kwargs) 
+
+
+def inference_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
     r"""
     Info:
         Execute inference and calculate loss, sychronize the train and evaluate progress. 
     Args:
         - model (nn.Module):
-        - data (dict): necessary keys: "l_view", "r_view"
+        - data (dict): 
         - loss_fn (callable): function or callable instance.
         - device (torch.device)
     Returns:
         - out (Tensor): predicted.
         - loss (Tensor): calculated loss.
     """
-    def _infer_and_calc_loss_V1(model, data, loss_fn, device):
-        # NOTE Only work with _inference_V1
-        out, *_ = inference(model, data, device)
-        trg = data["trg"].to(device)
-        loss = loss_fn(out, trg)
-        return out, loss
+    def _infer_and_calc_loss_V1(model, data, loss_fn, device, *args, **kwargs):
+        outputs, targets = inference(model, data, device, *args, **kwargs)
+        loss = loss_fn(outputs, targets)
+        return outputs, targets, loss
 
-    raise NotImplementedError("Function utils.inference_and_calc_loss is not implemented yet.")
-    return _infer_and_calc_loss_V1(model, data, loss_fn, device)
+    return _infer_and_calc_loss_V1(model, data, loss_fn, device, *args, **kwargs)
 
-def cal_and_record_metrics(phase, epoch, output, target, metrics_logger, logger=None):
-    output = output.detach().cpu().numpy()
-    target = target.detach().cpu().numpy()
-    batch_size = output.shape[0]
+
+def calc_and_record_metrics(phase, epoch, outputs, targets, metrics_logger, logger=None):
+    # outputs = [out.detach().cpu().numpy() for out in outputs]
+    # targets = [trg.detach().cpu().numpy() for trg in targets]
+    out = outputs["mask_l"].detach().cpu().numpy()
+    trg = targets["gt_mask_l"].detach().cpu().numpy()
+    batch_size = output[0].shape[0]
     for idx in range(batch_size):
-        metrics_logger.cal_metrics(phase, epoch, target[idx], output[idx], data_range=1)
+        metrics_logger.cal_metrics(phase, epoch, trg[idx], out[idx])
+
 
 def rgb2hsv(image: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     r"""
@@ -176,6 +260,7 @@ def rgb2hsv(image: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
 
     return torch.stack([h, s, v], dim=-3)
 
+
 def flip_and_rotate(img):
     r"""
     Info:
@@ -190,12 +275,14 @@ def flip_and_rotate(img):
     imgs.extend(rotate(imgs[1]))
     return imgs
 
+
 def rotate(img):
     imgs = []
     imgs.append(torch.rot90(torch.clone(img), k=1, dims=[1, 2]))
     imgs.append(torch.rot90(torch.clone(img), k=2, dims=[1, 2]))
     imgs.append(torch.rot90(torch.clone(img), k=3, dims=[1, 2]))
     return imgs
+
 
 def crop(img, trg_h, trg_w, stride):
     r"""
@@ -234,6 +321,7 @@ def crop(img, trg_h, trg_w, stride):
             )
     return patches
 
+
 def save_image(output, mean, norm, path2file):
     r"""
     Info:
@@ -254,6 +342,7 @@ def save_image(output, mean, norm, path2file):
         return True
     except:
         return False
+
 
 def visualize(array, folder, name="image.png", method="cv2"):
     r"""
@@ -280,6 +369,7 @@ def visualize(array, folder, name="image.png", method="cv2"):
     else:
         Image.fromarray(array, mode=mode).save(path)
 
+
 def resize(img: torch.Tensor, size: list or tuple, logger=None):
     r"""
     Info:
@@ -304,6 +394,7 @@ def resize(img: torch.Tensor, size: list or tuple, logger=None):
     img = img.reshape(org_shape)
     return img
 
+
 def set_device(model: torch.nn.Module, gpu_list: list, logger=None):
     with log_info(msg="Set device for model.", level="INFO", state=True, logger=logger):
         if not torch.cuda.is_available():
@@ -320,6 +411,7 @@ def set_device(model: torch.nn.Module, gpu_list: list, logger=None):
             raise NotImplementedError("Multi-GPU mode is not implemented yet.")
     return model, device
 
+
 def try_make_path_exists(path):
     if not os.path.exists(path):
         try:
@@ -328,9 +420,11 @@ def try_make_path_exists(path):
             return False
     return True
 
+
 def save_ckpt(path2file, logger=None, **ckpt):
     with log_info(msg="Save checkpoint to {}".format(path2file), level="INFO", state=True, logger=logger):
         torch.save(ckpt, path2file)
+
 
 def pack_code(cfg, logger=None):
     src_dir = cfg.GENERAL.ROOT
@@ -355,25 +449,8 @@ def pack_code(cfg, logger=None):
     # raise NotImplementedError("Function pack_code is not implemented yet.")
 
 
-if __name__ == "__main__":
-    from skimage import color
-    from skimage import data
-    img = data.astronaut()
-    np_img_hsv = color.rgb2hsv(img).transpose((2, 0, 1))
-    np_img_hsv[0] = np_img_hsv[0] * 2 * math.pi
-    pt_img_hsv = rgb2hsv(torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0)/1.0)
-    print("The End.")
-    '''vec1 = torch.randn((2, 3, 5, 5)) * (-1)
-    vec2 = torch.randn((2, 3, 5, 5)) * 2
 
-    assert vec1.shape == vec2.shape, "ShapeError"
-    assert vec1.shape[1] == 3, "ShapeError"
-    numerator = torch.sum(vec1.permute(0, 2, 3, 1) * vec2.permute(0, 2, 3, 1), dim=3, keepdim=True)
-    denominator = torch.sqrt(
-        torch.sum(vec1.permute(0, 2, 3, 1) ** 2, dim=3, keepdim=True) \
-            * torch.sum(vec2.permute(0, 2, 3, 1) ** 2, dim=3, keepdim=True)
-    )
-    cosine = numerator / denominator
-    print(cosine)'''
+if __name__ == "__main__":
+    log_info(msg="Hello", level="INFO", state=False, logger=None)
 
     

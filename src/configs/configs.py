@@ -16,8 +16,8 @@ parser.add_argument("--id", type=str, required=True)
 parser.add_argument("--dataset", type=str, required=True)
 parser.add_argument("--data_size", type=float, default=1.0)
 parser.add_argument("--batch_size", type=int, required=True)
-parser.add_argument("--lr", type=float, default=2e-5 * 8)
-parser.add_argument("--max_epoch", type=int, default=400)
+parser.add_argument("--lr", type=float, default=2e-4)
+parser.add_argument("--max_epoch", type=int, default=20)
 parser.add_argument("--resume", default="false", choices=["true", "false"], type=str, required=True)
 parser.add_argument("--train", default="true", choices=["true", "false"], type=str, required=True)
 parser.add_argument("--valid", default="true", choices=["true", "false"], type=str, required=True)
@@ -50,13 +50,22 @@ cfg.MODEL.PATH2CKPT                             =   os.path.join(cfg.MODEL.CKPT_
 # DATA
 # ================================ 
 cfg.DATA.DIR                                    =   {
+    "YRVOS2021FPS6": "/data/YoutubeRVOS2021", 
+    "YoutubeRVOS2021": "/data/YoutubeRVOS2021", 
+    "YoutubeRVOS2021FPS6": "/data/YoutubeRVOS2021", 
     "Dataset": "path2dataset", 
 }
 cfg.DATA.NUMWORKERS                             =   4
 cfg.DATA.DATASET                                =   args.dataset # "MNHHAZE"
-cfg.DATA.MEAN                                   =   [0., 0., 0.]
-cfg.DATA.NORM                                   =   [255, 255, 255]
-cfg.DATA.AUGMENTATION                           =   True
+cfg.DATA.AUGMENTATION                           =   False
+
+cfg.DATA.VIDEO.MEAN                             =   [0., 0., 0.]
+cfg.DATA.VIDEO.NORM                             =   [255, 255, 255]
+cfg.DATA.VIDEO.FORMAT                           =   "RGB"
+cfg.DATA.VIDEO.NUM_FRAMES                       =   16
+cfg.DATA.VIDEO.RESOLUTION                       =   ((512, 512), (128, 128), (32, 32))
+
+cfg.DATA.QUERY.MAX_WORDS                        =   20
 
 # ================================ 
 # OPTIMIZER
@@ -83,7 +92,7 @@ cfg.SCHEDULER.UPDATE_COEFF                      =   0.5
 # ================================ 
 cfg.LOSS_FN.LOSS_FN                             =   "MSELoss" 
 cfg.LOSS_FN.WEIGHTS                             =   {
-    "Item": "Weight(float)"
+    "POS_WEIGHT": 1.5, "BBOX_COEFF": 1.5, 
 }
 
 # ================================ 

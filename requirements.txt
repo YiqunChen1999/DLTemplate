@@ -1,0 +1,13 @@
+transformers>=4.0.1
+opencv-python>=4.2.0
+h5py>=2.10.0
+attribdict>=0.0.5
+numpy>=1.18.1
+tqdm>=4.50.0
+# mmcv-full>=1.1.4
+# torchtext>=0.7.0
+matplotlib>=3.3.2
+tensorboard>=2.3.0
+h5py>=2.10.0
+ffmpeg>=1.4
+pandas>=1.1.2

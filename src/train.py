@@ -44,15 +44,13 @@ def train_one_epoch(
             if idx not in random_samples_idx:
                 continue
             optimizer.zero_grad()
-            out, loss = utils.inference_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device)
+            outputs, targets, loss = utils.inference_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device, *args, **kwargs)
             loss.backward()
             optimizer.step()
             total_loss.append(loss.detach().cpu().item())
 
             metrics_logger.record("train", epoch, "loss", loss.detach().cpu().item())
-            output = out.detach().cpu()
-            target = data["trg"]
-            utils.cal_and_record_metrics("train", epoch, output, target, metrics_logger, logger=logger)
+            utils.calc_and_record_metrics("train", epoch, outputs, targets, metrics_logger, logger=logger)
 
             pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(epoch, cfg.TRAIN.MAX_EPOCH, round(sum(total_loss)/len(total_loss), 5), round(total_loss[-1], 5)))
             pbar.update()

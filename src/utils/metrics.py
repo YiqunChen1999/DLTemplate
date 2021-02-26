@@ -4,69 +4,154 @@ Author:
     Yiqun Chen
 Docs:
     Metrics.
+Note: 
+    Adapted from https://github.com/fperazzi/davis-2017
 """
 
-import os, sys
+import os, sys, copy, torch
 sys.path.append(os.path.join(sys.path[0], ".."))
 sys.path.append(os.path.join(os.getcwd(), "src"))
-import copy, skimage, math, sklearn
 import numpy as np
-from sklearn import metrics
-from skimage import metrics
 import matplotlib.pyplot as plt
-import lpips, torch
 import torch.nn.functional as F
 
-from configs.configs import cfg
 from utils import utils
 # import utils
 
-def calc_mae(y_true, y_pred, *args, **kwargs):
-    if y_true.shape[0] == 3:
-        y_true = np.transpose(y_true, (1, 2, 0))
-        y_pred = np.transpose(y_pred, (1, 2, 0))
-    mae_0 = sklearn.metrics.mean_absolute_error(y_true[:,:,0], y_pred[:,:,0])
-    mae_1 = sklearn.metrics.mean_absolute_error(y_true[:,:,1], y_pred[:,:,1])
-    mae_2 = sklearn.metrics.mean_absolute_error(y_true[:,:,2], y_pred[:,:,2])
-    return np.mean([mae_0,mae_1,mae_2])
 
-def calc_psnr(image_true, image_test, data_range=None, *args, **kwargs):
-    psnr = skimage.metrics.peak_signal_noise_ratio(image_true, image_test, data_range=data_range)
-    return psnr
-    
-def calc_ssim(im1, im2, data_range=None, multichannel=True, *args, **kwargs):
-    if isinstance(im1, torch.Tensor):
-        return utils.cal_ssim_pt(im1, im2, data_range, multichannel, *args, **kwargs)
-    if im1.shape[0] == 3:
-        im1 = np.transpose(im1, (1, 2, 0))
-        im2 = np.transpose(im2, (1, 2, 0))
-    ssim = skimage.metrics.structural_similarity(im1, im2, data_range=data_range, multichannel=multichannel)
-    return ssim
+def calc_F(foreground_mask, gt_mask, bound_th=0.008):
+	"""
+	Compute mean,recall and decay from per-frame evaluation.
+	Calculates precision/recall for boundaries between foreground_mask and
+	gt_mask using morphological operators to speed it up.
+	Arguments:
+		foreground_mask (ndarray): binary segmentation image.
+		gt_mask         (ndarray): binary annotated image.
+	Returns:
+		F (float): boundaries F-measure
+		P (float): boundaries precision
+		R (float): boundaries recall
+	"""
+	assert np.atleast_3d(foreground_mask).shape[2] == 1
 
-lpips_alex_scorer = lpips.LPIPS()
-lpips_alex_scorer, device = utils.set_device(lpips_alex_scorer, cfg.GENERAL.GPU)
+	bound_pix = bound_th if bound_th >= 1 else \
+			np.ceil(bound_th*np.linalg.norm(foreground_mask.shape))
 
-def calc_lpips(image_true, image_test):
-    r"""
-    Info:
-        Calculate LPIPS loss (AlexNet).
-    Args:
-        - image_true (ndarray | Tensor): takes values from [0, 1], should be RGB image with format [C, H, W].
-        - image_test (ndarray | Tensor): takes values from [0, 1], should be RGB image with format [C, H, W].
-    Returns:
-        - score (float): the LPIPS loss.
-    """
-    
-    if isinstance(image_true, np.ndarray):
-        image_true = torch.from_numpy((image_true-0.5)*2)
-        image_test = torch.from_numpy((image_test-0.5)*2)
-    image_true = image_true.unsqueeze(0)
-    image_test = image_test.unsqueeze(0)
-    assert image_test.shape[1] == 3 and image_true.shape[1] == 3, \
-        "Image should be RGB and format should be [C, H, W]"
-    score = lpips_alex_scorer(image_true, image_test)
-    score = score.item()
-    return score
+	# Get the pixel boundaries of both masks
+	fg_boundary = seg2bmap(foreground_mask)
+	gt_boundary = seg2bmap(gt_mask)
+
+	from skimage.morphology import binary_dilation,disk
+
+	fg_dil = binary_dilation(fg_boundary,disk(bound_pix))
+	gt_dil = binary_dilation(gt_boundary,disk(bound_pix))
+
+	# Get the intersection
+	gt_match = gt_boundary * fg_dil
+	fg_match = fg_boundary * gt_dil
+
+	# Area of the intersection
+	n_fg     = np.sum(fg_boundary)
+	n_gt     = np.sum(gt_boundary)
+
+	#% Compute precision and recall
+	if n_fg == 0 and  n_gt > 0:
+		precision = 1
+		recall = 0
+	elif n_fg > 0 and n_gt == 0:
+		precision = 0
+		recall = 1
+	elif n_fg == 0  and n_gt == 0:
+		precision = 1
+		recall = 1
+	else:
+		precision = np.sum(fg_match)/float(n_fg)
+		recall    = np.sum(gt_match)/float(n_gt)
+
+	# Compute F measure
+	if precision + recall == 0:
+		F_score = 0
+	else:
+		F_score = 2*precision*recall/(precision+recall)
+
+	return F_score
+
+def seg2bmap(seg,width=None, height=None):
+	"""
+	From a segmentation, compute a binary boundary map with 1 pixel wide
+	boundaries.  The boundary pixels are offset by 1/2 pixel towards the
+	origin from the actual segment boundary.
+	Arguments:
+		seg     : Segments labeled from 1..k.
+		width	  :	Width of desired bmap  <= seg.shape[1]
+		height  :	Height of desired bmap <= seg.shape[0]
+	Returns:
+		bmap (ndarray):	Binary boundary map.
+	 David Martin <dmartin@eecs.berkeley.edu>
+	 January 2003
+ """
+
+	seg = seg.astype(np.bool)
+	seg[seg>0] = 1
+
+	assert np.atleast_3d(seg).shape[2] == 1
+
+	width  = seg.shape[1] if width  is None else width
+	height = seg.shape[0] if height is None else height
+
+	h,w = seg.shape[:2]
+
+	ar1 = float(width) / float(height)
+	ar2 = float(w) / float(h)
+
+	assert not (width>w | height>h | abs(ar1-ar2)>0.01),\
+			'Can''t convert %dx%d seg to %dx%d bmap.'%(w,h,width,height)
+
+	e  = np.zeros_like(seg)
+	s  = np.zeros_like(seg)
+	se = np.zeros_like(seg)
+
+	e[:,:-1]    = seg[:,1:]
+	s[:-1,:]    = seg[1:,:]
+	se[:-1,:-1] = seg[1:,1:]
+
+	b        = seg^e | seg^s | seg^se
+	b[-1,:]  = seg[-1,:]^e[-1,:]
+	b[:,-1]  = seg[:,-1]^s[:,-1]
+	b[-1,-1] = 0
+
+	if w == width and h == height:
+		bmap = b
+	else:
+		bmap = np.zeros((height,width))
+		for x in range(w):
+			for y in range(h):
+				if b[y,x]:
+					j = 1+floor((y-1)+height / h)
+					i = 1+floor((x-1)+width  / h)
+					bmap[j,i] = 1
+
+	return bmap
+
+def calc_jaccard(annotation, segmentation):
+
+    """ Compute region similarity as the Jaccard Index.
+    Arguments:
+        annotation   (ndarray): binary annotation   map.
+        segmentation (ndarray): binary segmentation map.
+    Return:
+        jaccard (float): region similarity
+ """
+
+    annotation   = annotation.astype(np.bool)
+    segmentation = segmentation.astype(np.bool)
+
+    if np.isclose(np.sum(annotation),0) and np.isclose(np.sum(segmentation),0):
+        return 1
+    else:
+        return np.sum((annotation & segmentation)) / \
+                np.sum((annotation | segmentation),dtype=np.float32)
+
 
 class Metrics:
     def __init__(self):
@@ -103,13 +188,11 @@ class Metrics:
         return mean_metrics
 
     def cal_metrics(self, phase, epoch, *args, **kwargs):
-        mae = cal_mae(*args, **kwargs)
-        ssim = cal_ssim(*args, **kwargs)
-        psnr = cal_psnr(*args, **kwargs)
-        self.record(phase, epoch, "MAE", mae)
-        self.record(phase, epoch, "SSIM", ssim)
-        self.record(phase, epoch, "PSNR", psnr)
-        return mae, ssim, psnr
+        F_score = calc_F(*args, **kwargs)
+        jaccard = calc_jaccard(*args, **kwargs)
+        self.record(phase, epoch, "F_score", F_score)
+        self.record(phase, epoch, "jaccard", jaccard)
+        return F_score, jaccard
 
     def plot(self, path2dir):
         for phase in self.metrics.keys():
@@ -131,38 +214,4 @@ class Metrics:
 
 
 if __name__ == "__main__":
-    # metrics_logger = Metrics()
-    # for phase in ["train", "valid", "test"]:
-    #     for epoch in range(20):
-    #         for item in ["mse", "psnr", "ssim"]:
-    #             for i in range(10):
-    #                 metrics_logger.record(phase, epoch, item, np.random.randn(1))
-    # metrics_logger.get_metrics()
-    # print(metrics_logger.mean("train", 0, item=None))
-    # metrics_logger.plot("/home/chenyiqun/models/dehazing/tmp")
-    import cv2, time
-    path2img1 = "/home/chenyiqun/tmp/HAZE2021/src/02.png"
-    path2img2 = "/home/chenyiqun/tmp/HAZE2021/trg/02.png"
-    img1 = (cv2.imread(path2img1, -1) / (2 ** 8-1)).astype(np.float32)
-    img2 = (cv2.imread(path2img2, -1) / (2 ** 8-1)).astype(np.float32)
-
-    print(cal_ssim(img1, img2, data_range=1.0))
-    print(cal_ssim(torch.from_numpy(img1), torch.from_numpy(img2), data_range=1.0))
-
-    # start = time.time()
-    # for i in range(100):
-    #     img1 = torch.rand((3, 256, 256))
-    #     img2 = torch.rand((3, 256, 256))
-    #     img1[img1 < -1.] = -1.
-    #     img2[img2 < -1.] = -1.
-    #     img1[img1 > 1.] = 1.
-    #     img2[img2 > 1.] = 1.
-    #     # print(cal_lpips(img1.cuda(), img2.cuda()))
-    # print(time.time() - start)
-    
-    # print(cal_mae(img1, img2))
-    # print(cal_ssim(img1, img2, data_range=1, multichannel=True))
-    # print(cal_psnr(img1, img2, data_range=1))
-
-    # 0.031292318003256575 25.087839612030397 0.8068734330381345
-    # 0.031292318003256575 25.087839612030397 0.8068734330381345
+    pass
