@@ -280,6 +280,7 @@ class YoutubeRVOS2021FPS6(torch.utils.data.Dataset):
 
         # Other information.
         data["frame_idx"] = item["frame_idx"]
+        data["fn_video"] = item["fn_video"]
         
         return data
 
@@ -371,6 +372,7 @@ class YoutubeRVOS2021(torch.utils.data.Dataset):
         data["bert"] = self.bert_tokenizer(item["query"])
 
         # Other information.
+        data["fn_video"] = item["fn_video"]
         data["frame_idx"] = item["frame_idx"]
         data["padding"] = padding
 
