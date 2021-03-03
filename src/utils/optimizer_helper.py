@@ -43,6 +43,7 @@ def SGD(cfg, model):
     raise NotImplementedError("Optimizer SGD is not implemented yet.")
     return optimizer
 
+
 @add_optimizer
 def Adam(cfg, model):
     lr = cfg.OPTIMIZER.LR
@@ -50,19 +51,36 @@ def Adam(cfg, model):
     betas = cfg.OPTIMIZER.BETAS if cfg.OPTIMIZER.hasattr("BETAS") else (0.9, 0.999)
     eps = cfg.OPTIMIZER.EPS if cfg.OPTIMIZER.hasattr("EPS") else 1E-8
     amsgrad = cfg.OPTIMIZER.AMSGRAD if cfg.OPTIMIZER.hasattr("AMSGRAD") else False
-    optimizer = torch.optim.Adam(
-        [
-            {"params": model.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR}, 
-            {"params": model.decoder.parameters(), "lr": lr}, 
-            # {"params": model.bottleneck.parameters(), "lr": lr}, 
-        ], 
-        lr=lr, 
-        betas=betas, 
-        eps=eps, 
-        weight_decay=weight_decay, 
-        amsgrad=amsgrad, 
-    )
+    finetune_lr_factor = cfg.TRAIN.OPTIMIZER.FINETUNE_FACTOR if cfg.TRAIN.OPTIMIZER.hasattr("FINETUNE_FACTOR") else 1.0
+    if hasattr(model, "device_ids"):
+        optimizer = torch.optim.Adam(
+            [
+                {'params': model.module.text_encoder.parameters()}, 
+                {'params': model.module.decoder.parameters()}, 
+                {'params': model.module.video_encoder.model.parameters(), 'lr': lr * finetune_lr_factor}, 
+                # {
+                #     'params': model.module.word_embedding.embeddings.parameters(), 
+                #     'lr': lr * finetune_lr_factor, 
+                # },  
+            ], 
+            lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
+        )
+    else:
+        optimizer = torch.optim.Adam(
+            [
+                {'params': model.text_encoder.parameters()}, 
+                {'params': model.decoder.parameters()}, 
+                {'params': model.video_encoder.model.parameters(), 'lr': lr * finetune_lr_factor}, 
+                # {
+                #     'params': model.word_embedding.embeddings.parameters(), 
+                #     'lr': lr * finetune_lr_factor, 
+                # },  
+            ], 
+            lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
+        )
+
     return optimizer
+
 
 @add_optimizer
 def AdamW(cfg, model):
@@ -84,6 +102,7 @@ def AdamW(cfg, model):
         amsgrad=amsgrad, 
     )
     return optimizer
+
 
 def build_optimizer(cfg, model, *args, **kwargs):
     optimizer = _OPTIMIZER[cfg.OPTIMIZER.OPTIMIZER](cfg, model)

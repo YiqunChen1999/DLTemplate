@@ -14,7 +14,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.fft
 
-import lpips
 from utils import utils
 
 _LOSS_FN = {}
@@ -65,9 +64,9 @@ class MAELoss:
         
 
 @add_loss_fn
-class MaskBCEBoxMSEMAELoss:
+class MaskBCEBBoxMSELoss:
     def __init__(self, cfg, *args, **kwargs):
-        super(MaskBCEBoxMSEMAELoss, self).__init__()
+        super(MaskBCEBBoxMSELoss, self).__init__()
         self.cfg = cfg
         self.weight = self.cfg.LOSS_FN.WEIGHT
         self._build()
@@ -77,20 +76,49 @@ class MaskBCEBoxMSEMAELoss:
         self.mae_loss = nn.L1Loss()
 
     def cal_loss(self, output, target):
-        mask_s, mask_m, mask_l, bbox_s, bbox_m, bbox_l = list(output.values())
-        gt_mask_s, gt_mask_m, gt_mask_l, gt_bbox_s, gt_bbox_m, gt_bbox_l = list(target.values())
+        
+        loss_mask_s = F.binary_cross_entropy_with_logits(output["mask_s"], target["gt_mask_s"], pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
+        loss_mask_m = F.binary_cross_entropy_with_logits(output["mask_m"], target["gt_mask_m"], pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
+        loss_mask_l = F.binary_cross_entropy_with_logits(output["mask_l"], target["gt_mask_l"], pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
+        
+        loss_bbox_s = self.mse_loss(output["bbox_s"], target["gt_bbox_s"])
+        loss_bbox_m = self.mse_loss(output["bbox_m"], target["gt_bbox_m"])
+        loss_bbox_l = self.mse_loss(output["bbox_l"], target["gt_bbox_l"])
+        
+        loss = loss_mask_s + loss_mask_m + loss_mask_l + \
+            self.cfg.LOSS_FN.WEIGHTS.BBOX_COEFF * (loss_bbox_s + loss_bbox_m + loss_bbox_l)
 
-        loss_mask_s = F.binary_cross_entropy_with_logits(mask_s, gt_mask_s, pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
-        loss_mask_m = F.binary_cross_entropy_with_logits(mask_m, gt_mask_m, pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
-        loss_mask_l = F.binary_cross_entropy_with_logits(mask_l, gt_mask_l, pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
+        return loss
+
+    def __call__(self, output, target):
+        return self.cal_loss(output, target)
+
+
+@add_loss_fn
+class MaskBCEBBoxMSEMAELoss:
+    def __init__(self, cfg, *args, **kwargs):
+        super(MaskBCEBBoxMSEMAELoss, self).__init__()
+        self.cfg = cfg
+        self.weight = self.cfg.LOSS_FN.WEIGHT
+        self._build()
+
+    def _build(self):
+        self.mse_loss = nn.MSELoss()
+        self.mae_loss = nn.L1Loss()
+
+    def cal_loss(self, output, target):
         
-        loss_bbox_s = self.mse_loss(bbox_s, gt_bbox_s)
-        loss_bbox_m = self.mse_loss(bbox_m, gt_bbox_m)
-        loss_bbox_l = self.mse_loss(bbox_l, gt_bbox_l)
+        loss_mask_s = F.binary_cross_entropy_with_logits(output["mask_s"], target["gt_mask_s"], pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
+        loss_mask_m = F.binary_cross_entropy_with_logits(output["mask_m"], target["gt_mask_m"], pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
+        loss_mask_l = F.binary_cross_entropy_with_logits(output["mask_l"], target["gt_mask_l"], pos_weight=torch.tensor(self.cfg.LOSS_FN.WEIGHTS.POS_WEIGHT))
         
-        mae_loss_bbox_s = self.mae_loss(bbox_s, gt_bbox_s)
-        mae_loss_bbox_m = self.mae_loss(bbox_m, gt_bbox_m)
-        mae_loss_bbox_l = self.mae_loss(bbox_l, gt_bbox_l)
+        loss_bbox_s = self.mse_loss(output["bbox_s"], target["gt_bbox_s"])
+        loss_bbox_m = self.mse_loss(output["bbox_m"], target["gt_bbox_m"])
+        loss_bbox_l = self.mse_loss(output["bbox_l"], target["gt_bbox_l"])
+        
+        mae_loss_bbox_s = self.mae_loss(output["bbox_s"], target["gt_bbox_s"])
+        mae_loss_bbox_m = self.mae_loss(output["bbox_m"], target["gt_bbox_m"])
+        mae_loss_bbox_l = self.mae_loss(output["bbox_l"], target["gt_bbox_l"])
         
         loss = loss_mask_s + loss_mask_m + loss_mask_l + \
             self.cfg.LOSS_FN.WEIGHTS.BBOX_COEFF * (loss_bbox_s + loss_bbox_m + loss_bbox_l) + \

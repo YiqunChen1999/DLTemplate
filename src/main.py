@@ -10,35 +10,106 @@ import torch, torchvision
 from configs.configs import cfg
 from utils import utils, loss_fn_helper, lr_scheduler_helper, optimizer_helper
 from utils.logger import Logger
+from utils.metrics import Metrics
 from models import model_builder
 from data import data_loader
 from train import train_one_epoch
 from evaluate import evaluate
+from inference import inference
 
 def main():
-    raise NotImplementedError("Function main is not implemented yet, please finish your code and \
-        remove this error message.")
     # TODO Set logger to record information.
+    # Set logger to record information.
     logger = Logger(cfg)
-    # TODO Build model.
+    logger.log_info(cfg)
+    metrics_logger = Metrics()
+    utils.pack_code(cfg, logger=logger)
+
+    # Build model.
     model = model_builder.build_model(cfg=cfg, logger=logger)
-    # TODO Read checkpoint.
+
+    # Read checkpoint.
     ckpt = torch.load(cfg.MODEL.PATH2CKPT) if cfg.GENERAL.RESUME else {}
-    # TODO Load pre-trained model.
-    model = model.load_state_dict(ckpt["model"]) if cfg.GENERAL.RESUME else model
+
+    if cfg.GENERAL.RESUME:
+        with utils.log_info(msg="Load pre-trained model.", level="INFO", state=True, logger=logger):
+            model.load_state_dict(ckpt["model"])
+
+            # Set device.
+            if cfg.GENERAL.PIPLINE:
+                model, device = utils.set_pipline(model, cfg)
+            else:
+                model, device = utils.set_device(model, cfg.GENERAL.GPU)
+            
+            optimizer = optimizer_helper.build_optimizer(cfg=cfg, model=model)
+            optimizer.load_state_dict(ckpt["optimizer"])
+            
+            lr_scheduler = lr_scheduler_helper.build_scheduler(cfg=cfg, optimizer=optimizer)
+            # lr_scheduler.load_state_dict(ckpt["lr_scheduler"])
+    else:
+        # Set device.
+        if cfg.GENERAL.PIPLINE:
+            model, device = utils.set_pipline(model, cfg)
+        else:
+            model, device = utils.set_device(model, cfg.GENERAL.GPU)
+        optimizer = optimizer_helper.build_optimizer(cfg=cfg, model=model)
+        lr_scheduler = lr_scheduler_helper.build_scheduler(cfg=cfg, optimizer=optimizer)
+
     resume_epoch = ckpt["epoch"] if cfg.GENERAL.RESUME else 0
-    optimizer = ckpt["optimizer"] if cfg.GENERAL.RESUME else optimizer_helper.build_optimizer(cfg=cfg)
-    lr_scheduler = ckpt["lr_scheduler"] if cfg.GENERAL.RESUME else lr_scheduler_helper.build_scheduler(cfg=cfg, optimizer=optimizer)
-    loss_fn = ckpt["loss_fn"] if cfg.GENERAL.RESUME else loss_fn_helper.build_loss_fn(cfg=cfg)
-    # TODO Set device.
-    model, device = utils.set_device(model, cfg.GENERAL.GPU)
-    # TODO Prepare dataset.
+    # loss_fn = ckpt["loss_fn"] if cfg.GENERAL.RESUME else loss_fn_helper.build_loss_fn(cfg=cfg)
+    loss_fn = loss_fn_helper.build_loss_fn(cfg=cfg)
+    
+    # Prepare dataset.
     if cfg.GENERAL.TRAIN:
-        train_data_loader = data_loader.build_data_loader(cfg, "dataset", "train")
+        train_data_loader = data_loader.build_data_loader(cfg, cfg.DATA.DATASET, "train")
     if cfg.GENERAL.VALID:
-        valid_data_loader = data_loader.build_data_loader(cfg, "dataset", "valid")
+        valid_data_loader = data_loader.build_data_loader(cfg, cfg.DATA.DATASET, "valid")
     if cfg.GENERAL.TEST:
-        test_data_loader = data_loader.build_data_loader(cfg, "dataset", "test")
+        test_data_loader = data_loader.build_data_loader(cfg, cfg.DATA.DATASET, "test")
+
+    spatial_feats = utils.get_spatial_feats(
+        cfg.DATA.VIDEO.RESOLUTION, 
+        torch.device("cuda:{}".format(cfg.GENERAL.GPU[1])) if cfg.GENERAL.PIPLINE else torch.device("cuda:{}".format(cfg.GENERAL.GPU[0]))
+    )
+
+    # ################ NOTE DEBUG NOTE ################
+    with utils.log_info(msg="Debug", level="INFO", state=True, logger=logger):
+        '''train_one_epoch(
+            epoch=0,
+            cfg=cfg,  
+            model=model, 
+            data_loader=train_data_loader, 
+            device=device, 
+            loss_fn=loss_fn, 
+            optimizer=optimizer, 
+            lr_scheduler=lr_scheduler, 
+            metrics_logger=metrics_logger, 
+            logger=logger, 
+            spatial_feats=spatial_feats, 
+        )
+        evaluate(
+            epoch=0, 
+            cfg=cfg, 
+            model=model, 
+            data_loader=valid_data_loader, 
+            device=device, 
+            loss_fn=loss_fn, 
+            metrics_logger=metrics_logger, 
+            phase="valid", 
+            logger=logger,
+            save=cfg.SAVE.SAVE,  
+            spatial_feats=spatial_feats, 
+        )
+        inference(
+            cfg=cfg, 
+            model=model, 
+            data_loader=train_data_loader, 
+            device=device, 
+            phase="train", 
+            logger=logger, 
+            spatial_feats=spatial_feats, 
+        )'''
+    # ################ NOTE DEBUG NOTE ################
     
     # TODO Train, evaluate model and save checkpoint.
     for epoch in range(cfg.TRAIN.MAX_EPOCH):
@@ -46,35 +117,75 @@ def main():
             break
         if resume_epoch > epoch:
             continue
-        
-        train_one_epoch(
-            epoch=epoch, 
-            model=model, 
-            data_loader=train_data_loader, 
-            device=device, 
-            loss_fn=loss_fn, 
-            optimizer=optimizer, 
-            lr_scheduler=lr_scheduler, 
-            logger=logger, 
-        )
-        utils.save_ckpt(
-            path2file=os.path.join(cfg.MODEL.CKPT_DIR, cfg.GENERAL.ID + "_" + str(epoch).zfill(3) + ".pth"), 
-            logger=logger, 
-            model=model.state_dict(), 
-            epoch=epoch, 
-            optimizer=optimizer, 
-            lr_scheduler=lr_scheduler, 
-            loss_fn=loss_fn, 
-        )
-        evaluate(
-            epoch=epoch, 
-            model=model, 
-            data_loader=valid_data_loader, 
-            device=device, 
-            loss_fn=loss_fn, 
-            logger=logger,
-            save=cfg.SAVE.SAVE,  
-        )
+        if cfg.GENERAL.TRAIN:
+            train_one_epoch(
+                epoch=epoch,
+                cfg=cfg,  
+                model=model, 
+                data_loader=train_data_loader, 
+                device=device, 
+                loss_fn=loss_fn, 
+                optimizer=optimizer, 
+                lr_scheduler=lr_scheduler, 
+                metrics_logger=metrics_logger, 
+                logger=logger, 
+                spatial_feats=spatial_feats, 
+            )
+
+        optimizer.zero_grad()
+        with torch.no_grad():
+            utils.save_ckpt(
+                # path2file=os.path.join(cfg.MODEL.CKPT_DIR, cfg.GENERAL.ID + "_" + str(epoch).zfill(3) + ".pth"), 
+                path2file=cfg.MODEL.PATH2CKPT, 
+                cfg=cfg, 
+                logger=logger, 
+                model=model.state_dict(), 
+                epoch=epoch, 
+                optimizer=optimizer.state_dict(), 
+                lr_scheduler=lr_scheduler.state_dict(), # NOTE Need attribdict>=0.0.5
+                loss_fn=loss_fn, 
+                # metrics=metrics_logger, 
+            )
+        if epoch in cfg.SCHEDULER.UPDATE_EPOCH:
+            with torch.no_grad():
+                utils.save_ckpt(
+                    path2file=os.path.join(cfg.MODEL.CKPT_DIR, cfg.GENERAL.ID + "_" + str(epoch).zfill(3) + ".pth"), 
+                    cfg=cfg, 
+                    logger=logger, 
+                    model=model.state_dict(), 
+                    epoch=epoch, 
+                    optimizer=optimizer.state_dict(), 
+                    lr_scheduler=lr_scheduler.state_dict(), # NOTE Need attribdict>=0.0.5
+                    loss_fn=loss_fn, 
+                )
+            if cfg.GENERAL.TEST:
+                evaluate(
+                    epoch=epoch, 
+                    cfg=cfg, 
+                    model=model, 
+                    data_loader=test_data_loader, 
+                    device=device, 
+                    loss_fn=loss_fn, 
+                    metrics_logger=metrics_logger, 
+                    phase="test", 
+                    logger=logger,
+                    save=cfg.SAVE.SAVE,  
+                    spatial_feats=spatial_feats, 
+                )
+        if cfg.GENERAL.VALID:
+            inference(
+                epoch=epoch, 
+                cfg=cfg, 
+                model=model, 
+                data_loader=valid_data_loader, 
+                device=device, 
+                loss_fn=loss_fn, 
+                metrics_logger=metrics_logger, 
+                phase="valid", 
+                logger=logger,
+                save=cfg.SAVE.SAVE,  
+                spatial_feats=spatial_feats, 
+            )
 
     if cfg.GENERAL.TEST:
         evaluate(
@@ -85,6 +196,7 @@ def main():
             loss_fn=loss_fn, 
             logger=logger,
             save=cfg.SAVE.SAVE,  
+            spatial_feats=spatial_feats, 
         )
     return None
 

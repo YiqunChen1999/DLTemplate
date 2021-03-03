@@ -14,6 +14,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import utils
+from .modules import (
+    AsymmCrossAttnV1, 
+    AsymmCrossAttnV2, 
+    MFCNModuleV2, 
+)
 
 _DECODER = {}
 
@@ -21,32 +26,169 @@ def add_decoder(decoder):
     _DECODER[decoder.__name__] = decoder
     return decoder
 
+
 @add_decoder
-class MFMFCNDecoderV2(torch.nn.Module):
+class MSMFCNDecoderV2(torch.nn.Module):
     """
     This module can deal with multi-task.
     """
     def __init__(self, cfg, *args, **kwargs):
-        super(MFMFCNDecoderV2, self).__init__()
+        super(MSMFCNDecoderV2, self).__init__()
         self.cfg = cfg
         self.args = args
         self.kwargs = kwargs
-        self.text_repr_dim = self.cfg.DATA.SENTENCES.DIM
+        self.text_repr_dim = self.cfg.DATA.QUERY.DIM
         self.video_repr_channels = self.cfg.DATA.VIDEO.REPR_CHANNELS
-        self.spatial_map_dim = self.cfg.DATA.VIDEO.SPATIAL_MAP_DIM
-        self.class_num = self.cfg.DATA.VIDEO.CLASS_NUM
+        self.spatial_feat_dim = self.cfg.DATA.VIDEO.SPATIAL_FEAT_DIM
         self.resolution = self.cfg.DATA.VIDEO.RESOLUTION
+        self.num_frames = self.cfg.DATA.VIDEO.NUM_FRAMES
+        self._build()
+
+    def _build(self):
+        # Linear transformation from video to text.
+        self.asymm_cross_attn = AsymmCrossAttnV2(self.text_repr_dim, self.video_repr_channels, self.spatial_feat_dim, self.resolution)
+        
+        self.deconv_vs2m = nn.Sequential(
+            nn.ConvTranspose2d(
+                self.video_repr_channels[0], self.video_repr_channels[1], kernel_size=8, stride=4, padding=2, bias=True
+            ), 
+            nn.Conv2d(
+                self.video_repr_channels[1], self.video_repr_channels[1], kernel_size=3, stride=1, padding=1, bias=True
+            ),
+        )
+        self.deconv_vm2l = nn.Sequential(
+            nn.ConvTranspose2d(
+                self.video_repr_channels[1], self.video_repr_channels[2], kernel_size=8, stride=4, padding=2, bias=True
+            ), 
+            nn.Conv2d(
+                self.video_repr_channels[2], self.video_repr_channels[2], kernel_size=3, stride=1, padding=1, bias=True
+            ),
+        )
+        self.deconv_v = nn.Sequential(
+            nn.ConvTranspose3d(
+                self.video_repr_channels[0], self.video_repr_channels[0], kernel_size=(8, 1, 1), stride=(4, 1, 1), padding=(2, 0, 0), bias=True
+            ), 
+            nn.Conv3d(
+                self.video_repr_channels[0], self.video_repr_channels[0], kernel_size=3, stride=1, padding=1, bias=True
+            ),
+        )
+        # self.deconv_t = nn.Sequential(
+        #     nn.ConvTranspose3d(
+        #         self.text_repr_dim, self.text_repr_dim, kernel_size=(8, 1, 1), stride=(4, 1, 1), padding=(2, 0, 0), bias=True
+        #     ), 
+        #     nn.Conv3d(
+        #         self.text_repr_dim, self.text_repr_dim, kernel_size=3, stride=1, padding=1, bias=True
+        #     ),
+        # )
+
+        self.v_gmax = nn.AdaptiveMaxPool2d(1)
+        
+        self.fcn_s = MFCNModuleV2(self.text_repr_dim, 2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[1], self.spatial_feat_dim)
+        self.fcn_m = MFCNModuleV2(self.text_repr_dim, 2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[1], self.video_repr_channels[2], self.spatial_feat_dim)
+        self.fcn_l = MFCNModuleV2(self.text_repr_dim, 2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[2], self.video_repr_channels[2]//2, self.spatial_feat_dim)
+        
+        self.fcn_fusion = nn.Conv2d(3, 1, kernel_size=3, stride=1, padding=1, bias=True)
+
+        self.text_max_pool = nn.AdaptiveMaxPool1d(1)
+        self.F_va_max_pool = nn.AdaptiveMaxPool2d(1, 1)
+        self.linear_vm = nn.Conv2d(192, self.video_repr_channels[1], kernel_size=1)
+
+    def forward(self, text_repr, video_repr, *args, **kwargs):
+        spatial_maps = kwargs["spatial_feats"]
+        spatial_map_s, spatial_map_m, spatial_map_l = spatial_maps
+        batch_size, chann_s, temper_s, hs, ws = video_repr[-1].shape
+        batch_size, chann_m, temper_m, hm, wm = video_repr[-2].shape
+        spatial_maps_s = spatial_map_s.repeat(batch_size*temper_s, 1, 1, 1)
+        spatial_maps_m = spatial_map_m.repeat(batch_size*self.cfg.DATA.VIDEO.NUM_FRAMES, 1, 1, 1)
+        spatial_maps_l = spatial_map_l.repeat(batch_size*self.cfg.DATA.VIDEO.NUM_FRAMES, 1, 1, 1)
+        text_repr = text_repr.repeat(temper_s, 1, 1)
+        F_ta, F_va = self.asymm_cross_attn(text_repr, video_repr[-1], spatial_maps_s)
+
+        F_va = self.deconv_v(F_va.reshape(batch_size, -1, temper_s, hs, ws))
+        F_va = F_va.reshape(batch_size*self.cfg.DATA.VIDEO.NUM_FRAMES, -1, hs, ws)
+        # F_ta = self.deconv_t(F_ta.reshape(batch_size, -1, temper_s, hs, ws)).reshape(batch_size*self.cfg.DATA.VIDEO.NUM_FRAMES, -1, hs, ws)
+        F_ta = F.interpolate(F_ta.reshape(batch_size, -1, temper_s, hs, ws), size=(self.cfg.DATA.VIDEO.NUM_FRAMES, hs, ws), mode="trilinear", align_corners=False)
+        F_ta = F_ta.reshape(batch_size*self.cfg.DATA.VIDEO.NUM_FRAMES, -1, hs, ws)
+        
+        # Multi-Resolution Feature Decoder.
+        F_vm = self.deconv_vs2m(F_va)
+        F_vl = self.deconv_vm2l(F_vm)
+        
+        m_size = F_vm.shape[-2: ]
+        l_size = F_vl.shape[-2: ]
+        
+        F_tm = F.interpolate(F_ta, size=m_size, mode="bilinear", align_corners=False)
+        F_tl = F.interpolate(F_ta, size=l_size, mode="bilinear", align_corners=False)
+
+
+        text_repr = text_repr.repeat(batch_size*self.cfg.DATA.VIDEO.NUM_FRAMES//text_repr.shape[0], 1, 1)
+        # FCN to get segmentation.
+        mask_s, bbox_s = self.fcn_s(
+            torch.cat([
+                self.F_va_max_pool(F_ta)[0].squeeze(2).squeeze(2), 
+                self.F_va_max_pool(F_va)[0].squeeze(2).squeeze(2), 
+                self.text_max_pool(text_repr.permute(0, 2, 1).contiguous()).squeeze(2)
+            ], dim=1), 
+            torch.cat([F_va, F_ta, spatial_maps_s.repeat(self.cfg.DATA.VIDEO.NUM_FRAMES//temper_s, 1, 1, 1)], dim=1)
+        )
+        mask_m, bbox_m = self.fcn_m(
+            torch.cat([
+                self.F_va_max_pool(F_ta)[0].squeeze(2).squeeze(2), 
+                self.F_va_max_pool(F_va)[0].squeeze(2).squeeze(2), 
+                self.text_max_pool(text_repr.permute(0, 2, 1).contiguous()).squeeze(2)
+            ], dim=1), 
+            torch.cat([F_vm, F_tm, spatial_maps_m], dim=1)
+        )
+        mask_l, bbox_l = self.fcn_l(
+            torch.cat([
+                self.F_va_max_pool(F_ta)[0].squeeze(2).squeeze(2), 
+                self.F_va_max_pool(F_va)[0].squeeze(2).squeeze(2), 
+                self.text_max_pool(text_repr.permute(0, 2, 1).contiguous()).squeeze(2)
+            ], dim=1), 
+            torch.cat([F_vl, F_tl, spatial_maps_l], dim=1)
+        )
+
+        l_size = mask_l.shape[-2], mask_l.shape[-1]
+        mask_l = self.fcn_fusion(torch.cat([
+            utils.resize(mask_s, l_size, False), utils.resize(mask_m, l_size, False), mask_l
+        ], dim=1))
+
+        assert bbox_l.shape == bbox_s.shape, "Shape Error"
+
+        # masks = [mask_s.squeeze(1), mask_m.squeeze(1), mask_l.squeeze(1)]
+        mask_s, mask_m, mask_l = mask_s.squeeze(1), mask_m.squeeze(1), mask_l.squeeze(1)
+        # mask_s = mask_s.reshape(batch_size, self.num_frames, self.resolution[2][0], self.resolution[2][1])
+        # mask_m = mask_m.reshape(batch_size, self.num_frames, self.resolution[1][0], self.resolution[1][1])
+        # mask_l = mask_l.reshape(batch_size, self.num_frames, self.resolution[0][0], self.resolution[0][1])
+        # bbox_s = bbox_s.reshape(batch_size, self.num_frames, 4)
+        # bbox_m = bbox_m.reshape(batch_size, self.num_frames, 4)
+        # bbox_l = bbox_l.reshape(batch_size, self.num_frames, 4)
+        outputs = {
+            "mask_s": mask_s, "mask_m": mask_m, "mask_l": mask_l, 
+            "bbox_s": bbox_s, "bbox_m": bbox_m, "bbox_l": bbox_l, 
+        }
+        return outputs
+
+
+@add_decoder
+class MSMFCNDecoderV1(torch.nn.Module):
+    """
+    This module can deal with multi-task.
+    """
+    def __init__(self, cfg, *args, **kwargs):
+        super(MSMFCNDecoderV1, self).__init__()
+        self.cfg = cfg
+        self.args = args
+        self.kwargs = kwargs
+        self.text_repr_dim = self.cfg.DATA.QUERY.DIM
+        self.video_repr_channels = self.cfg.DATA.VIDEO.REPR_CHANNELS
+        self.spatial_feat_dim = self.cfg.DATA.VIDEO.SPATIAL_FEAT_DIM
+        self.resolution = self.cfg.DATA.VIDEO.RESOLUTION
+        self.num_frames = self.cfg.DATA.VIDEO.NUM_FRAMES
         self._build_model()
 
     def _build_model(self):
-        # Linear transformation from video to text.
-        self.linear_vc2t = nn.Linear(self.video_repr_channels[0]+self.spatial_map_dim, self.text_repr_dim, bias=True)
-        self.max_pool = nn.AdaptiveMaxPool2d((1, self.text_repr_dim))
-        self.linear_t2vc = nn.Linear(self.text_repr_dim, self.video_repr_channels[0]+self.spatial_map_dim, bias=True)
-
-        self.linear_vck = nn.Linear(self.video_repr_channels[0]+self.spatial_map_dim, self.video_repr_channels[0]+self.spatial_map_dim, bias=True)
-        self.linear_vcq = nn.Linear(self.video_repr_channels[0]+self.spatial_map_dim, self.video_repr_channels[0]+self.spatial_map_dim, bias=True)
-        self.linear_vcv = nn.Linear(self.video_repr_channels[0]+self.spatial_map_dim, self.video_repr_channels[0]+self.spatial_map_dim, bias=True)
+        self.asymm_cross_attn = AsymmCrossAttnV1(self.text_repr_dim, self.video_repr_channels, self.spatial_feat_dim, self.resolution)
         
         self.deconv_vs2m = nn.Sequential(
             nn.ConvTranspose2d(
@@ -67,98 +209,15 @@ class MFMFCNDecoderV2(torch.nn.Module):
 
         self.v_gmax = nn.AdaptiveMaxPool2d(1)
         
-        self.fcn_s = nn.ModuleDict({
-            "conv_1": nn.Conv2d(
-                self.text_repr_dim+self.video_repr_channels[0]+self.spatial_map_dim, self.video_repr_channels[1], kernel_size=3, stride=1, padding=1, bias=True
-            ), 
-            "cbn_1": ConditionalBatchNorm2d(
-                2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[1]
-            ), 
-            "relu_1": nn.ReLU(), 
-            "conv_2": nn.Conv2d(
-                self.video_repr_channels[1], self.video_repr_channels[1], kernel_size=3, stride=1, padding=1, bias=True
-            ), 
-            "cbn_2": ConditionalBatchNorm2d(
-                2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[1]
-            ), 
-            "relu_2": nn.ReLU(), 
-            "conv_3": nn.Conv2d(
-                self.video_repr_channels[1], 1, kernel_size=1, stride=1, bias=True
-            ), 
-            "box_branch": nn.Sequential(
-                nn.Linear(self.video_repr_channels[1], 4), 
-            ), 
-        })
-        self.fcn_m = nn.ModuleDict({
-            "conv_1": nn.Conv2d(
-                self.text_repr_dim+self.video_repr_channels[1]+self.spatial_map_dim, self.video_repr_channels[2], kernel_size=3, stride=1, padding=1, bias=True
-            ), 
-            "cbn_1": ConditionalBatchNorm2d(
-                2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[2]
-            ), 
-            "relu_1": nn.ReLU(), 
-            "conv_2": nn.Conv2d(
-                self.video_repr_channels[2], self.video_repr_channels[2], kernel_size=3, stride=1, padding=1, bias=True
-            ), 
-            "cbn_2": ConditionalBatchNorm2d(
-                2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[2]
-            ), 
-            "relu_2": nn.ReLU(), 
-            "conv_3": nn.Conv2d(
-                self.video_repr_channels[2], 1, kernel_size=1, stride=1, bias=True
-            ), 
-            "box_branch": nn.Sequential(
-                nn.Linear(self.video_repr_channels[2], 4), 
-            ), 
-        })
-        self.fcn_l = nn.ModuleDict({
-            "conv_1": nn.Conv2d(
-                self.text_repr_dim+self.video_repr_channels[2]+self.spatial_map_dim, self.video_repr_channels[2]//2, kernel_size=3, stride=1, padding=1, bias=True
-            ), 
-            "cbn_1": ConditionalBatchNorm2d(
-                2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[2]//2
-            ), 
-            "relu_1": nn.ReLU(), 
-            "conv_2": nn.Conv2d(
-                self.video_repr_channels[2]//2, self.video_repr_channels[2]//2, kernel_size=3, stride=1, padding=1, bias=True
-            ), 
-            "cbn_2": ConditionalBatchNorm2d(
-                2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[2]//2
-            ), 
-            "relu_2": nn.ReLU(), 
-            "conv_3": nn.Conv2d(
-                self.video_repr_channels[2]//2, 1, kernel_size=1, stride=1, bias=True
-            ), 
-            "box_branch": nn.Sequential(
-                nn.Linear(self.video_repr_channels[2]//2, 4), 
-            ), 
-        })
+        self.fcn_s = MFCNModuleV2(self.text_repr_dim, 2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[0], self.video_repr_channels[1], self.spatial_feat_dim)
+        self.fcn_m = MFCNModuleV2(self.text_repr_dim, 2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[1], self.video_repr_channels[2], self.spatial_feat_dim)
+        self.fcn_l = MFCNModuleV2(self.text_repr_dim, 2*self.text_repr_dim+self.video_repr_channels[0], self.video_repr_channels[2], self.video_repr_channels[2]//2, self.spatial_feat_dim)
         
-        self.fcn_fusion = nn.Conv2d(
-            3, 1, kernel_size=3, stride=1, padding=1, bias=True
-        )
+        self.fcn_fusion = nn.Conv2d(3, 1, kernel_size=3, stride=1, padding=1, bias=True)
 
         self.text_max_pool = nn.AdaptiveMaxPool1d(1)
         self.F_va_max_pool = nn.AdaptiveMaxPool2d(1, 1)
         self.linear_vm = nn.Conv2d(192, self.video_repr_channels[1], kernel_size=1)
-        self.linear = nn.Linear(self.video_repr_channels[0], self.text_repr_dim)
-        self.tanh = nn.Tanh()
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-        # self.box_fusion = nn.Conv1d(3, 1, 1)
-
-    def fcn(self, fcn_func, text_repr, video_repr):
-        # NOTE 
-        video_repr = fcn_func["conv_1"](video_repr)
-        video_repr, _ = fcn_func["cbn_1"](text_repr, video_repr)
-        video_repr = fcn_func["relu_1"](video_repr)
-        video_repr = fcn_func["conv_2"](video_repr)
-        video_repr, _ = fcn_func["cbn_2"](text_repr, video_repr)
-        video_vec = self.v_gmax(video_repr).squeeze(2).squeeze(2)
-        bbox = fcn_func["box_branch"](video_vec)
-        video_repr = fcn_func["relu_2"](video_repr)
-        video_repr = fcn_func["conv_3"](video_repr)
-        return video_repr, bbox
 
     def attend(self, text_repr, video_repr, spatial_maps_s):
         batch_size = video_repr.shape[0]
@@ -217,13 +276,13 @@ class MFMFCNDecoderV2(torch.nn.Module):
         return F_ta, F_va
 
     def forward(self, text_repr, video_repr, *args, **kwargs):
-        spatial_maps = kwargs["spatial_maps"]
+        spatial_maps = kwargs["spatial_feats"]
         spatial_map_s, spatial_map_m, spatial_map_l = spatial_maps
         batch_size = text_repr.shape[0]
         spatial_maps_s = spatial_map_s.repeat(batch_size, 1, 1, 1)
         spatial_maps_m = spatial_map_m.repeat(batch_size, 1, 1, 1)
         spatial_maps_l = spatial_map_l.repeat(batch_size, 1, 1, 1)
-        F_ta, F_va = self.attend(text_repr, video_repr[-1], spatial_maps_s)
+        F_ta, F_va = self.asymm_cross_attn(text_repr, video_repr[-1], spatial_maps_s)
 
         # Multi-Resolution Feature Decoder.
         F_vm = self.deconv_vs2m(F_va)
@@ -236,8 +295,7 @@ class MFMFCNDecoderV2(torch.nn.Module):
         F_tl = F.interpolate(F_ta, size=l_size, mode="bilinear", align_corners=False)
 
         # FCN to get segmentation.
-        pred_s, bbox_s = self.fcn(
-            self.fcn_s, 
+        mask_s, bbox_s = self.fcn_s( 
             torch.cat([
                 self.F_va_max_pool(F_ta)[0].squeeze(2).squeeze(2), 
                 self.F_va_max_pool(F_va)[0].squeeze(2).squeeze(2), 
@@ -245,8 +303,7 @@ class MFMFCNDecoderV2(torch.nn.Module):
             ], dim=1), 
             torch.cat([F_va + video_repr[-1].mean(-3), spatial_maps_s, F_ta], dim=1)
         )
-        pred_m, bbox_m = self.fcn(
-            self.fcn_m, 
+        mask_m, bbox_m = self.fcn_m(
             torch.cat([
                 self.F_va_max_pool(F_ta)[0].squeeze(2).squeeze(2), 
                 self.F_va_max_pool(F_va)[0].squeeze(2).squeeze(2), 
@@ -254,8 +311,7 @@ class MFMFCNDecoderV2(torch.nn.Module):
             ], dim=1), 
             torch.cat([F_vm + self.linear_vm(video_repr[-2].mean(-3)), spatial_maps_m, F_tm], dim=1)
         )
-        pred_l, bbox_l = self.fcn(
-            self.fcn_l, 
+        mask_l, bbox_l = self.fcn_l(
             torch.cat([
                 self.F_va_max_pool(F_ta)[0].squeeze(2).squeeze(2), 
                 self.F_va_max_pool(F_va)[0].squeeze(2).squeeze(2), 
@@ -264,18 +320,18 @@ class MFMFCNDecoderV2(torch.nn.Module):
             torch.cat([F_vl, spatial_maps_l, F_tl], dim=1)
         )
 
-        l_size = pred_l.shape[-2], pred_l.shape[-1]
-        pred_l = self.fcn_fusion(torch.cat([
-            utils.resize(pred_s, l_size, False), utils.resize(pred_m, l_size, False), pred_l
+        l_size = mask_l.shape[-2], mask_l.shape[-1]
+        mask_l = self.fcn_fusion(torch.cat([
+            utils.resize(mask_s, l_size, False), utils.resize(mask_m, l_size, False), mask_l
         ], dim=1))
-        # bbox_l = self.box_fusion(torch.cat([
-        #     bbox_s.unsqueeze(1), bbox_m.unsqueeze(1), bbox_l.unsqueeze(1)
-        # ], dim=1)).squeeze(1)
         assert bbox_l.shape == bbox_s.shape, "Shape Error"
 
-        # preds = [pred_s.squeeze(1), pred_m.squeeze(1), pred_l.squeeze(1)]
-        pred_s, pred_m, pred_l = pred_s.squeeze(1), pred_m.squeeze(1), pred_l.squeeze(1)
-        return pred_s, pred_m, pred_l, bbox_s, bbox_m, bbox_l
+        mask_s, mask_m, mask_l = mask_s.squeeze(1), mask_m.squeeze(1), mask_l.squeeze(1)
+        outputs = {
+            "mask_s": mask_s, "mask_m": mask_m, "mask_l": mask_l, 
+            "bbox_s": bbox_s, "bbox_m": bbox_m, "bbox_l": bbox_l, 
+        }
+        return outputs
 
 
 

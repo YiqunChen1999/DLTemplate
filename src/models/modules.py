@@ -371,6 +371,203 @@ class _Inflated3DConvNet(nn.Module):
         raise NotImplementedError("Method _Inflated3DConvNet.forward is not implemented yet.")
 
 
+class AsymmCrossAttnV2(nn.Module):
+    def __init__(self, text_repr_dim, video_repr_channels, spatial_feat_dim, resolution, *args, **kwargs):
+        super(AsymmCrossAttnV2, self).__init__()
+        self.text_repr_dim = text_repr_dim
+        self.video_repr_channels = video_repr_channels
+        self.spatial_feat_dim = spatial_feat_dim
+        self.resolution = resolution
+        self._build()
+
+    def _build(self):
+        self.linear_vc2t = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.text_repr_dim, bias=True)
+        self.max_pool = nn.AdaptiveMaxPool2d((1, self.text_repr_dim))
+        self.linear_t2vc = nn.Linear(self.text_repr_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+
+        self.linear_vck = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+        self.linear_vcq = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+        self.linear_vcv = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+        
+
+    def forward(self, text_repr, video_repr, spatial_maps_s):
+        batch_size, chann, temper, height, width = video_repr.shape
+        v_shape = video_repr.shape[-2], video_repr.shape[-1]
+
+        # video_repr = F.normalize(video_repr.mean(-3), p=2, dim=1)
+        video_repr = video_repr.reshape(batch_size * temper, chann, height, width)
+
+        # (N, 832, 32, 32) + (N, 8, 32, 32) -> (N, 832+8, 32, 32)
+        F_vc = torch.cat([video_repr, spatial_maps_s], dim=1)
+        
+        # video to text attention.
+        
+        # Align video features to features with same dimension as language features.
+        # (N, 832+8, 32, 32) -> (N, 32, 32, 832+8)
+        F_vc = F_vc.permute(0, 2, 3, 1).contiguous()
+        # (N, 32, 32, 832+8) -> (N*32*32, 832+8) -> (N*32*32, 300)
+        F_vc2t = self.linear_vc2t(F_vc.reshape(-1, self.video_repr_channels[0]+self.spatial_feat_dim).contiguous())
+        # (N*32*32, 300) -> (N, 32*32, 300)
+        F_vc2t = F_vc2t.reshape(batch_size * temper, -1, self.text_repr_dim).contiguous()
+
+        # Conducting co-attention
+        # (N, 32*32, 300)*[(N, 20, 300) -> (N, 300, 20)] -> (N, 32*32, 20)
+        F_ta = torch.matmul(F_vc2t, text_repr.transpose(-1, -2).contiguous())
+        F_ta = F_ta * (self.text_repr_dim ** (-0.5))
+        F_ta = torch.softmax(F_ta, dim=-1)
+        # (N, 32*32, 20)*(N, 20, 300) -> (N, 32*32, 300)
+        F_ta = torch.matmul(F_ta, text_repr)
+        # (N, 32*32, 300) -> (N, 32, 32, 300)
+        F_ta = F_ta.reshape(batch_size * temper, self.resolution[2][0], self.resolution[2][1], self.text_repr_dim).contiguous()
+        # (N, 32, 32, 832+8) -> (N, 832+8, 32, 32)
+        F_vc = F_vc.permute(0, 3, 1, 2).contiguous()
+        # (N, 32, 32, 300) -> (N, 300, 32, 32)
+        F_ta = F_ta.permute(0, 3, 1, 2).contiguous()
+
+        # text to video attention
+        # Align text features to features with same dimension as visual features.
+
+        F_t2vc = self.linear_t2vc(self.max_pool(text_repr)).repeat(1, self.resolution[2][0]**2, 1).contiguous()
+        F_vcq = self.linear_vcq(F_vc.permute(0, 2, 3, 1).contiguous().reshape(batch_size * temper, self.resolution[2][0]**2, self.video_repr_channels[0]+self.spatial_feat_dim)).contiguous()
+        F_vck = self.linear_vck(F_vc.permute(0, 2, 3, 1).contiguous().reshape(batch_size * temper, self.resolution[2][0]**2, self.video_repr_channels[0]+self.spatial_feat_dim)).contiguous()
+        F_vcv = self.linear_vcv(F_vc.permute(0, 2, 3, 1).contiguous().reshape(batch_size * temper, self.resolution[2][0]**2, self.video_repr_channels[0]+self.spatial_feat_dim)).contiguous()
+
+        F_vcq = F_vcq * F_t2vc
+        F_vck = F_vck * F_t2vc
+
+        # Conducting Attention
+        F_va = torch.matmul(F_vck, F_vcq.permute(0, 2, 1).contiguous())
+        F_va = F_va * ((self.video_repr_channels[0]+self.spatial_feat_dim) ** (-0.5))
+        F_va = torch.softmax(F_va, dim=-1)
+        F_va = torch.matmul(F_va, F_vcv)
+        F_va = F_va.reshape(batch_size * temper, self.resolution[2][0], self.resolution[2][1], self.video_repr_channels[0]+self.spatial_feat_dim).permute(0, 3, 1, 2).contiguous()
+        F_va = F_va[:, :self.video_repr_channels[0], :, :]
+
+        return F_ta, F_va
+
+
+class AsymmCrossAttnV1(nn.Module):
+    def __init__(self, text_repr_dim, video_repr_channels, spatial_feat_dim, resolution, *args, **kwargs):
+        super(AsymmCrossAttnV1, self).__init__()
+        self.text_repr_dim = text_repr_dim
+        self.video_repr_channels = video_repr_channels
+        self.spatial_feat_dim = spatial_feat_dim
+        self.resolution = resolution
+        self._build()
+
+    def _build(self):
+        self.linear_vc2t = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.text_repr_dim, bias=True)
+        self.max_pool = nn.AdaptiveMaxPool2d((1, self.text_repr_dim))
+        self.linear_t2vc = nn.Linear(self.text_repr_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+
+        self.linear_vck = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+        self.linear_vcq = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+        self.linear_vcv = nn.Linear(self.video_repr_channels[0]+self.spatial_feat_dim, self.video_repr_channels[0]+self.spatial_feat_dim, bias=True)
+        
+
+    def forward(self, text_repr, video_repr, spatial_maps_s):
+        batch_size = video_repr.shape[0]
+        v_shape = video_repr.shape[-2], video_repr.shape[-1]
+
+        video_repr = F.normalize(video_repr.mean(-3), p=2, dim=1)
+
+        # (N, 832, 32, 32) + (N, 8, 32, 32) -> (N, 832+8, 32, 32)
+        F_vc = torch.cat([video_repr, spatial_maps_s], dim=1)
+        
+        # video to text attention.
+        
+        # Align video features to features with same dimension as language features.
+        # (N, 832+8, 32, 32) -> (N, 32, 32, 832+8)
+        F_vc = F_vc.permute(0, 2, 3, 1).contiguous()
+        # (N, 32, 32, 832+8) -> (N*32*32, 832+8) -> (N*32*32, 300)
+        F_vc2t = self.linear_vc2t(F_vc.reshape(-1, self.video_repr_channels[0]+self.spatial_feat_dim).contiguous())
+        # (N*32*32, 300) -> (N, 32*32, 300)
+        F_vc2t = F_vc2t.reshape(batch_size, -1, self.text_repr_dim).contiguous()
+
+        # Conducting co-attention
+        # (N, 32*32, 300)*[(N, 20, 300) -> (N, 300, 20)] -> (N, 32*32, 20)
+        F_ta = torch.matmul(F_vc2t, text_repr.transpose(-1, -2).contiguous())
+        F_ta = F_ta * (self.text_repr_dim ** (-0.5))
+        F_ta = torch.softmax(F_ta, dim=-1)
+        # (N, 32*32, 20)*(N, 20, 300) -> (N, 32*32, 300)
+        F_ta = torch.matmul(F_ta, text_repr)
+        # (N, 32*32, 300) -> (N, 32, 32, 300)
+        F_ta = F_ta.reshape(batch_size, self.resolution[2][0], self.resolution[2][1], self.text_repr_dim).contiguous()
+        # (N, 32, 32, 832+8) -> (N, 832+8, 32, 32)
+        F_vc = F_vc.permute(0, 3, 1, 2).contiguous()
+        # (N, 32, 32, 300) -> (N, 300, 32, 32)
+        F_ta = F_ta.permute(0, 3, 1, 2).contiguous()
+
+        # text to video attention
+        # Align text features to features with same dimension as visual features.
+
+        F_t2vc = self.linear_t2vc(self.max_pool(text_repr)).repeat(1, self.resolution[2][0]**2, 1).contiguous()
+        F_vcq = self.linear_vcq(F_vc.permute(0, 2, 3, 1).contiguous().reshape(batch_size, self.resolution[2][0]**2, self.video_repr_channels[0]+self.spatial_feat_dim)).contiguous()
+        F_vck = self.linear_vck(F_vc.permute(0, 2, 3, 1).contiguous().reshape(batch_size, self.resolution[2][0]**2, self.video_repr_channels[0]+self.spatial_feat_dim)).contiguous()
+        F_vcv = self.linear_vcv(F_vc.permute(0, 2, 3, 1).contiguous().reshape(batch_size, self.resolution[2][0]**2, self.video_repr_channels[0]+self.spatial_feat_dim)).contiguous()
+
+        F_vcq = F_vcq * F_t2vc
+        F_vck = F_vck * F_t2vc
+
+        # Conducting Attention
+        F_va = torch.matmul(F_vck, F_vcq.permute(0, 2, 1).contiguous())
+        F_va = F_va * ((self.video_repr_channels[0]+self.spatial_feat_dim) ** (-0.5))
+        F_va = torch.softmax(F_va, dim=-1)
+        F_va = torch.matmul(F_va, F_vcv)
+        F_va = F_va.reshape(batch_size, self.resolution[2][0], self.resolution[2][1], self.video_repr_channels[0]+self.spatial_feat_dim).permute(0, 3, 1, 2).contiguous()
+        F_va = F_va[:, :self.video_repr_channels[0], :, :]
+
+        return F_ta, F_va
+
+
+class MFCNModuleV2(nn.Module):
+    def __init__(self, text_repr_dim, cbn_dim, in_video_repr_channel, out_video_repr_channel, spatial_feat_dim, *args, **kwargs):
+        super(MFCNModuleV2, self).__init__()
+        self.text_repr_dim = text_repr_dim
+        self.cbn_dim = cbn_dim
+        self.in_video_repr_channel = in_video_repr_channel
+        self.out_video_repr_channel = out_video_repr_channel
+        self.spatial_feat_dim = spatial_feat_dim
+
+        self._build()
+
+    def _build(self):
+        self.v_gmax = nn.AdaptiveMaxPool2d(1)
+
+        self.conv_1 = nn.Conv2d(
+            self.text_repr_dim+self.in_video_repr_channel+self.spatial_feat_dim, self.out_video_repr_channel, kernel_size=3, stride=1, padding=1, bias=True
+        )
+        self.cbn_1 = ConditionalBatchNorm2d(
+            self.cbn_dim, self.in_video_repr_channel, self.out_video_repr_channel
+        )
+        self.relu_1 = nn.ReLU()
+        self.conv_2 = nn.Conv2d(
+            self.out_video_repr_channel, self.out_video_repr_channel, kernel_size=3, stride=1, padding=1, bias=True
+        )
+        self.cbn_2 = ConditionalBatchNorm2d(
+            self.cbn_dim, self.in_video_repr_channel, self.out_video_repr_channel
+        )
+        self.relu_2 = nn.ReLU()
+        self.conv_3 = nn.Conv2d(
+            self.out_video_repr_channel, 1, kernel_size=1, stride=1, bias=True
+        )
+        self.box_branch = nn.Sequential(
+            nn.Linear(self.out_video_repr_channel, 4), 
+        )
+
+    def forward(self, text_repr, video_repr):
+        video_repr = self.conv_1(video_repr)
+        video_repr, _ = self.cbn_1(text_repr, video_repr)
+        video_repr = self.relu_1(video_repr)
+        video_repr = self.conv_2(video_repr)
+        video_repr, _ = self.cbn_2(text_repr, video_repr)
+        video_vec = self.v_gmax(video_repr).squeeze(2).squeeze(2)
+        bbox = self.box_branch(video_vec)
+        video_repr = self.relu_2(video_repr)
+        video_repr = self.conv_3(video_repr)
+        return video_repr, bbox
+
+
 # ################################
 # I3D Modules                    #
 # ################################

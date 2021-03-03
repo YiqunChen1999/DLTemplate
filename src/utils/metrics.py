@@ -76,6 +76,7 @@ def calc_F(foreground_mask, gt_mask, bound_th=0.008):
 
 	return F_score
 
+
 def seg2bmap(seg,width=None, height=None):
 	"""
 	From a segmentation, compute a binary boundary map with 1 pixel wide
@@ -133,6 +134,7 @@ def seg2bmap(seg,width=None, height=None):
 
 	return bmap
 
+
 def calc_jaccard(annotation, segmentation):
 
     """ Compute region similarity as the Jaccard Index.
@@ -187,11 +189,11 @@ class Metrics:
             mean_metrics[key] = np.mean(np.array(value))
         return mean_metrics
 
-    def cal_metrics(self, phase, epoch, *args, **kwargs):
+    def calc_metrics(self, phase, epoch, *args, **kwargs):
         F_score = calc_F(*args, **kwargs)
         jaccard = calc_jaccard(*args, **kwargs)
         self.record(phase, epoch, "F_score", F_score)
-        self.record(phase, epoch, "jaccard", jaccard)
+        self.record(phase, epoch, "Jaccard", jaccard)
         return F_score, jaccard
 
     def plot(self, path2dir):

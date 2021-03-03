@@ -14,12 +14,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import utils
-from .modules import *
+from .modules import (
+    _Inflated3DConvNet, 
+    EarlyFusion, 
+    EarlyFusionWithCBN, 
+)
 
-_ENCODER = {}
+_VIDEO_ENCODER = {}
 
 def add_encoder(encoder):
-    _ENCODER[encoder.__name__] = encoder
+    _VIDEO_ENCODER[encoder.__name__] = encoder
     return encoder
 
 
@@ -29,21 +33,20 @@ class ResInterI3DVEncoderV1(nn.Module):
     def __init__(self, cfg, *args, **kwargs):
         super(ResInterI3DVEncoderV1, self).__init__()
         self.cfg = cfg
-        self.num_classes = self.cfg.DATA.VIDEO.CLASS_NUM
-        self.pretrained = self.cfg.MODEL.VIDEO_ENCODER.PRETRAINED
-        self.pretrained_path = self.cfg.MODEL.VIDEO_ENCODER.CHECKPOINT
+        self.pretrained = self.cfg.MODEL.VENCODER.PRETRAINED
+        self.pretrained_path = self.cfg.MODEL.VENCODER.CHECKPOINT
         self.args = args
         self.kwargs = kwargs
-        self._build_model()
+        self._build()
         self._load_pretrained_parameters()
 
-    def _build_model(self):
+    def _build(self):
         self.model = _Inflated3DConvNet()
 
-        # self.fusion_1 = EarlyFusion(300, 64)
-        # self.fusion_2 = EarlyFusion(300, 192)
-        # self.fusion_3 = EarlyFusion(300, 480)
-        # self.fusion_4 = EarlyFusion(300, 832)
+        self.fusion_1 = EarlyFusion(self.cfg.DATA.QUERY.DIM, 64)
+        self.fusion_2 = EarlyFusion(self.cfg.DATA.QUERY.DIM, 192)
+        self.fusion_3 = EarlyFusion(self.cfg.DATA.QUERY.DIM, 480)
+        self.fusion_4 = EarlyFusion(self.cfg.DATA.QUERY.DIM, 832)
         
         # self.fusion_1 = EarlyFusionWithCBN(300, 64)
         # self.fusion_2 = EarlyFusionWithCBN(300, 192)
@@ -59,7 +62,6 @@ class ResInterI3DVEncoderV1(nn.Module):
         if self.pretrained:
             assert self.pretrained_path is not None, \
                 "the path to pretrained parameters is none, please check it."
-            print(">>>> loading pretrained backbone parameters...")
             self.model.load_state_dict(
                 torch.load(self.pretrained_path, map_location=lambda storage, loc: storage)
             )
