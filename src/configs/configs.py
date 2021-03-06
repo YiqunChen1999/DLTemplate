@@ -45,36 +45,18 @@ cfg.GENERAL.PIPLINE                             =   True
 # ================================ 
 cfg.MODEL.CKPT_DIR                              =   os.path.join(cfg.GENERAL.ROOT, "checkpoints", cfg.GENERAL.ID)
 cfg.MODEL.PATH2CKPT                             =   os.path.join(cfg.MODEL.CKPT_DIR, "{}.pth".format(cfg.GENERAL.ID))
-cfg.MODEL.TENCODER.ARCH                         =   "ConvTEncoderV1" # TODO
-cfg.MODEL.VENCODER.ARCH                         =   "ResInterI3DVEncoderV1"
-cfg.MODEL.VENCODER.PRETRAINED                   =   True
-cfg.MODEL.VENCODER.CHECKPOINT                   =   os.path.join(configs.GENERAL.ROOT, "checkpoints", "i3d_rgb.pth")
-cfg.MODEL.DECODER.ARCH                          =   "MSMFCNDecoderV1"
+cfg.MODEL.ENCODER.ARCH                          =   "" # TODO
+cfg.MODEL.DECODER.ARCH                          =   ""
 
 # ================================ 
 # DATA
 # ================================ 
 cfg.DATA.DIR                                    =   {
-    "YRVOS2021FPS6": "/data/YoutubeRVOS2021", 
-    "YoutubeRVOS2021": "/data/YoutubeRVOS2021", 
-    "YoutubeRVOS2021FPS6": "/data/YoutubeRVOS2021", 
-    "A2DSentences": "/data/A2D/Develop/raw", 
-    "JHMDBSentences": "/data/JHMDB/raw", 
+    "Dataset": "/path/to/dataset", 
 }
 cfg.DATA.NUMWORKERS                             =   4
 cfg.DATA.DATASET                                =   args.dataset 
 cfg.DATA.RANDOM_SAMPLE_RATIO                    =   args.data_size
-cfg.DATA.MULTI_FRAMES                           =   False
-cfg.DATA.VIDEO.MEAN                             =   [0., 0., 0.]
-cfg.DATA.VIDEO.NORM                             =   [255, 255, 255]
-cfg.DATA.VIDEO.FORMAT                           =   "RGB"
-cfg.DATA.VIDEO.NUM_FRAMES                       =   16
-cfg.DATA.VIDEO.RESOLUTION                       =   ((512, 512), (128, 128), (32, 32)) # ((256, 256), (64, 64), (16, 16))
-cfg.DATA.VIDEO.REPR_CHANNELS                    =   (832, 256, 128)
-cfg.DATA.VIDEO.SPATIAL_FEAT_DIM                 =   8
-cfg.DATA.QUERY.MAX_WORDS                        =   20
-cfg.DATA.QUERY.BERT_DIM                         =   768
-cfg.DATA.QUERY.DIM                              =   300
 
 # ================================ 
 # OPTIMIZER

@@ -143,63 +143,6 @@ def crop_and_resize(img, padding, resol, is_mask):
     return img
 
 
-def get_video_spatial_feature(featmap_H, featmap_W):
-    spatial_batch_val = np.zeros((8, featmap_H, featmap_W), dtype=np.float32)
-    for h in range(featmap_H):
-        for w in range(featmap_W):
-            xmin = w / featmap_W * 2 - 1
-            xmax = (w + 1) / featmap_W * 2 - 1
-            xctr = (xmin + xmax) / 2
-            ymin = h / featmap_H * 2 - 1
-            ymax = (h + 1) / featmap_H * 2 - 1
-            yctr = (ymin + ymax) / 2
-            spatial_batch_val[:, h, w] = [xmin, ymin, xmax, ymax, xctr, yctr, 1 / featmap_W, 1 / featmap_H]
-    return spatial_batch_val
-
-
-def get_spatial_feats(resol, device):
-    spatial_map_l = get_video_spatial_feature(resol[0][0], resol[0][1])
-    spatial_map_l = torch.from_numpy(spatial_map_l).unsqueeze(0)
-    spatial_map_l = spatial_map_l.to(device=device)
-    spatial_map_m = get_video_spatial_feature(resol[1][0], resol[1][1])
-    spatial_map_m = torch.from_numpy(spatial_map_m).unsqueeze(0)
-    spatial_map_m = spatial_map_m.to(device=device)
-    spatial_map_s = get_video_spatial_feature(resol[2][0], resol[2][1])
-    spatial_map_s = torch.from_numpy(spatial_map_s).unsqueeze(0)
-    spatial_map_s = spatial_map_s.to(device=device)
-    spatial_feats = [spatial_map_s, spatial_map_m, spatial_map_l]
-    return spatial_feats
-
-
-def get_coord(mask, normalize=True, to_tensor=True):
-    if isinstance(mask, np.ndarray):
-        org_type = "Ndarray"
-        mask = torch.from_numpy(mask)
-    elif isinstance(mask, torch.Tensor):
-        org_type = "Tensor"
-    else:
-        raise TypeError("Expect input is instance of Ndarray or Tensor, but got {}.".format(type(mask)))
-    shape = mask.shape
-    assert len(shape) == 2, "Two many indices"
-    if torch.sum(mask) == 0:
-        return torch.tensor([0, 0, 1, 1]).unsqueeze(0).type(torch.float32)
-    coord = torch.nonzero(mask)
-    x_min = torch.min(coord[:, 1]).type(torch.float32)
-    x_max = torch.max(coord[:, 1]).type(torch.float32)
-    y_min = torch.min(coord[:, 0]).type(torch.float32)
-    y_max = torch.max(coord[:, 0]).type(torch.float32)
-    x_min /= shape[1]
-    x_max /= shape[1]
-    y_min /= shape[0]
-    y_max /= shape[0]
-    coord = torch.tensor([x_min, x_max, y_min, y_max]).unsqueeze(0)
-    if to_tensor:
-        return coord
-    if org_type == "Ndarray":
-        coord = coord.numpy()
-    return coord
-
-
 def inference(model, data, device, infer_only=True, *args, **kwargs):
     r"""
     Info:
@@ -278,43 +221,7 @@ def inference_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
 
 
 def calc_and_record_metrics(phase, epoch, outputs, targets, metrics_logger, multi_frames=False, require_resize=False, padding=None, size=None, logger=None, *args, **kwargs):
-    # outputs = [out.detach().cpu().numpy() for out in outputs]
-    # targets = [trg.detach().cpu().numpy() for trg in targets]
-    _out = outputs.detach().cpu()
-    _trg = targets.detach().cpu()
-    batch_size = _out.shape[0]
-    num_frames = _out.shape[1]
-    out = _out
-    trg = _trg
-    if require_resize:
-        out = []
-        trg = []
-        if padding is None:
-            raise ValueError("Expect variable padding has padding for each frame, but got None.")
-        if size is None:
-            raise ValueError("Expect variable size has size for each frame, but got None.")
-        for batch_idx in range(batch_size):
-            out.append(crop_and_resize(
-                _out[batch_idx], 
-                (padding[0][batch_idx], padding[1][batch_idx], padding[2][batch_idx], padding[3][batch_idx]), 
-                (size[0][batch_idx], size[1][batch_idx]), 
-                False, 
-            ).numpy().astype(np.uint8))
-            trg.append(crop_and_resize(
-                _trg[batch_idx], 
-                (padding[0][batch_idx], padding[1][batch_idx], padding[2][batch_idx], padding[3][batch_idx]), 
-                (size[0][batch_idx], size[1][batch_idx]), 
-                False, 
-            ).numpy().astype(np.uint8))
-    else:
-        out = out.numpy().astype(np.uint8)
-        trg = trg.numpy().astype(np.uint8)
-    for batch_idx in range(batch_size):
-        if multi_frames:
-            for frame_idx in range(num_frames):
-                metrics_logger.calc_metrics(phase, epoch, trg[batch_idx][frame_idx], out[batch_idx][frame_idx])
-        else:
-            metrics_logger.calc_metrics(phase, epoch, trg[batch_idx], out[batch_idx])
+    raise NotImplementedError("Function calc_and_record_metrics is not implemented.")
 
 
 def rgb2hsv(image: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
@@ -536,9 +443,6 @@ def set_pipline(model, cfg, logger=None):
         model.video_encoder.to(device)
         model.text_encoder.to(device)
         model.decoder.to(torch.device("cuda:{}".format(gpu_list[1])))
-        # model.decoder.asymm_cross_attn.to(device)
-        # model.decoder.deconv_vs2m.to(device)
-        # model.decoder.deconv_vm2l.to(device)
     return model, device
 
 

@@ -60,17 +60,18 @@ def main():
     loss_fn = loss_fn_helper.build_loss_fn(cfg=cfg)
     
     # Prepare dataset.
-    if cfg.GENERAL.TRAIN:
+    try:
         train_data_loader = data_loader.build_data_loader(cfg, cfg.DATA.DATASET, "train")
-    if cfg.GENERAL.VALID:
+    except:
+        logger.log_info("Can not build data loader for train set.")
+    try:
         valid_data_loader = data_loader.build_data_loader(cfg, cfg.DATA.DATASET, "valid")
-    if cfg.GENERAL.TEST:
+    except:
+        logger.log_info("Can not build data loader for valid set.")
+    try:
         test_data_loader = data_loader.build_data_loader(cfg, cfg.DATA.DATASET, "test")
-
-    spatial_feats = utils.get_spatial_feats(
-        cfg.DATA.VIDEO.RESOLUTION, 
-        torch.device("cuda:{}".format(cfg.GENERAL.GPU[1])) if cfg.GENERAL.PIPLINE else torch.device("cuda:{}".format(cfg.GENERAL.GPU[0]))
-    )
+    except:
+        logger.log_info("Can not build data loader for test set.")
 
     # ################ NOTE DEBUG NOTE ################
     with utils.log_info(msg="Debug", level="INFO", state=True, logger=logger):
@@ -85,7 +86,6 @@ def main():
             lr_scheduler=lr_scheduler, 
             metrics_logger=metrics_logger, 
             logger=logger, 
-            spatial_feats=spatial_feats, 
         )
         evaluate(
             epoch=0, 
@@ -98,7 +98,6 @@ def main():
             phase="valid", 
             logger=logger,
             save=cfg.SAVE.SAVE,  
-            spatial_feats=spatial_feats, 
         )
         inference(
             cfg=cfg, 
@@ -107,7 +106,6 @@ def main():
             device=device, 
             phase="train", 
             logger=logger, 
-            spatial_feats=spatial_feats, 
         )'''
     # ################ NOTE DEBUG NOTE ################
     
@@ -129,13 +127,11 @@ def main():
                 lr_scheduler=lr_scheduler, 
                 metrics_logger=metrics_logger, 
                 logger=logger, 
-                spatial_feats=spatial_feats, 
             )
 
         optimizer.zero_grad()
         with torch.no_grad():
             utils.save_ckpt(
-                # path2file=os.path.join(cfg.MODEL.CKPT_DIR, cfg.GENERAL.ID + "_" + str(epoch).zfill(3) + ".pth"), 
                 path2file=cfg.MODEL.PATH2CKPT, 
                 cfg=cfg, 
                 logger=logger, 
@@ -170,7 +166,6 @@ def main():
                     phase="test", 
                     logger=logger,
                     save=cfg.SAVE.SAVE,  
-                    spatial_feats=spatial_feats, 
                 )
         if cfg.GENERAL.VALID:
             evaluate(
@@ -184,7 +179,6 @@ def main():
                 phase="valid", 
                 logger=logger,
                 save=cfg.SAVE.SAVE,  
-                spatial_feats=spatial_feats, 
             )
     # End of train-valid for loop.
 
@@ -200,7 +194,6 @@ def main():
             phase="valid", 
             logger=logger,
             save=cfg.SAVE.SAVE,  
-            spatial_feats=spatial_feats, 
         )
     if cfg.GENERAL.TEST:
         evaluate(
@@ -211,7 +204,6 @@ def main():
             loss_fn=loss_fn, 
             logger=logger,
             save=cfg.SAVE.SAVE,  
-            spatial_feats=spatial_feats, 
         )
     
     if cfg.GENERAL.INFER != "none":
@@ -234,7 +226,6 @@ def main():
             phase="valid", 
             logger=logger,
             save=cfg.SAVE.SAVE,  
-            spatial_feats=spatial_feats, 
         )
     return None
 

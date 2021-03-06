@@ -41,32 +41,19 @@ def train_one_epoch(
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
             optimizer.zero_grad()
-            outputs, targets, loss = utils.inference_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device, *args, **kwargs)
+            outputs, loss = utils.inference_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device, *args, **kwargs)
             loss.backward(); optimizer.step()
             total_loss.append(loss.detach().cpu().item())
 
             metrics_logger.record("train", epoch, "loss", loss.detach().cpu().item())
-            outs = outputs["mask_l"]
-            trgs = targets["gt_mask_l"]
-            if cfg.DATA.MULTI_FRAMES:
-                outs = outs.reshape(data["mask_s"].shape[0], cfg.DATA.VIDEO.NUM_FRAMES, cfg.DATA.VIDEO.RESOLUTION[0][0], cfg.DATA.VIDEO.RESOLUTION[0][1])
-                trgs = trgs.reshape(data["mask_s"].shape[0], cfg.DATA.VIDEO.NUM_FRAMES, cfg.DATA.VIDEO.RESOLUTION[0][0], cfg.DATA.VIDEO.RESOLUTION[0][1])
             utils.calc_and_record_metrics(
-                "train", epoch, outs, trgs, metrics_logger, 
-                multi_frames=cfg.DATA.MULTI_FRAMES, 
-                require_resize=False, 
-                padding=data["padding"], 
-                size=data["size"], 
-                logger=logger
+                "train", epoch, outputs, targets, metrics_logger, 
             )
 
             pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(epoch, cfg.TRAIN.MAX_EPOCH, round(sum(total_loss)/len(total_loss), 5), round(total_loss[-1], 5)))
             pbar.update()
         lr_scheduler.step()
         pbar.close()
-    mean_metrics = metrics_logger.mean("train", epoch)
-    log_info("Jaccard: {:<5}, F Score: {:<5}, Loss: {:<5}".format(
-        mean_metrics["Jaccard"], mean_metrics["F_score"], mean_metrics["loss"], 
-    ))
+    metrics_logger.summarize("train", log_info)
     return
     # TODO  Return some info.

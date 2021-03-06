@@ -55,26 +55,16 @@ def Adam(cfg, model):
     if hasattr(model, "device_ids"):
         optimizer = torch.optim.Adam(
             [
-                {'params': model.module.text_encoder.parameters()}, 
+                {"params": model.module.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR},  
                 {'params': model.module.decoder.parameters()}, 
-                {'params': model.module.video_encoder.model.parameters(), 'lr': lr * finetune_lr_factor}, 
-                # {
-                #     'params': model.module.word_embedding.embeddings.parameters(), 
-                #     'lr': lr * finetune_lr_factor, 
-                # },  
             ], 
             lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
         )
     else:
         optimizer = torch.optim.Adam(
             [
-                {'params': model.text_encoder.parameters()}, 
+                {"params": model.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR}, 
                 {'params': model.decoder.parameters()}, 
-                {'params': model.video_encoder.model.parameters(), 'lr': lr * finetune_lr_factor}, 
-                # {
-                #     'params': model.word_embedding.embeddings.parameters(), 
-                #     'lr': lr * finetune_lr_factor, 
-                # },  
             ], 
             lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
         )
@@ -93,7 +83,6 @@ def AdamW(cfg, model):
         [
             {"params": model.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR}, 
             {"params": model.decoder.parameters(), "lr": lr}, 
-            # {"params": model.bottleneck.parameters(), "lr": lr}, 
         ], 
         lr=lr, 
         betas=betas, 

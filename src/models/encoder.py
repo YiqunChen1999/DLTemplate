@@ -3,7 +3,7 @@ r"""
 Author:
     Yiqun Chen
 Docs:
-    Decoder classes.
+    Encoder classes.
 """
 
 import os, sys
@@ -14,26 +14,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import utils
-from .modules import (
-    AsymmCrossAttnV1, 
-    AsymmCrossAttnV2, 
-    MFCNModuleV2, 
-)
+from .modules import *
 
-_DECODER = {}
+_ENCODER = {}
 
-def add_decoder(decoder):
-    _DECODER[decoder.__name__] = decoder
-    return decoder
+def add_encoder(encoder):
+    _ENCODER[encoder.__name__] = encoder
+    return encoder
 
 
-@add_decoder
-class Decoder(torch.nn.Module):
-    """
-    This module can deal with multi-task.
-    """
+@add_encoder
+class Encoder(nn.Module):
+    """"""
     def __init__(self, cfg, *args, **kwargs):
-        super(Decoder, self).__init__()
+        super(Encoder, self).__init__()
         self.cfg = cfg
         self.args = args
         self.kwargs = kwargs
@@ -41,14 +35,13 @@ class Decoder(torch.nn.Module):
 
     def _build(self):
         raise NotImplementedError("")
-
-    def forward(self, text_repr, video_repr, *args, **kwargs):
+    
+    def forward(self, frames, text_repr, *args, **kwargs):
         raise NotImplementedError("")
-        return outputs
+        return video_repr
+
 
 
 
 if __name__ == "__main__":
-    print(_DECODER)
-    model = _DECODER["UNetDecoder"](None)
-    print(_DECODER)
+    print(_ENCODER)

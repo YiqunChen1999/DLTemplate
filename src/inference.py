@@ -41,41 +41,15 @@ def inference(
             outputs = utils.inference(model=model, data=data, device=device, *args, **kwargs)
             inference_time.append(time.time()-start_time)
 
-            outs = outputs["mask_l"]        
-
-            if cfg.DATA.MULTI_FRAMES:
-                outs = outs.reshape(data["mask_s"].shape[0], cfg.DATA.VIDEO.NUM_FRAMES, cfg.DATA.VIDEO.RESOLUTION[0][0], cfg.DATA.VIDEO.RESOLUTION[0][1])
-
             # Save results to directory.
             for batch_idx in range(outs.shape[0]):
                 save_dir = os.path.join(cfg.SAVE.DIR, phase, data["fn_video"][batch_idx])
                 if not os.path.exists(save_dir):
                     os.makedirs(save_dir)
-                if cfg.DATA.MULTI_FRAMES:
-                    for frame_idx in range(outs.shape[1]):
-                        mask = utils.crop_and_resize(
-                            outs[batch_idx][frame_idx].detach().cpu(), 
-                            (data["padding"][0][batch_idx], data["padding"][1][batch_idx], data["padding"][2][batch_idx], data["padding"][3][batch_idx]), 
-                            (data["size"][0][batch_idx], data["size"][1][batch_idx]), 
-                            False, 
-                        )
-                        # mask = ((mask > (torch.max(mask) / 2)) * 255).numpy().astype(np.uint8)
-                        path2file = os.path.join(save_dir, data["fns"][frame_idx][batch_idx]+".png")
-                        succeed = utils.save_image(mask.numpy().astype(np.uint8), path2file)
-                        if not succeed:
-                            log_info("Cannot save image to {}".format(path2file))
-                else:
-                    mask = utils.crop_and_resize(
-                        outs[batch_idx].detach().cpu(), 
-                        (data["padding"][0][batch_idx], data["padding"][1][batch_idx], data["padding"][2][batch_idx], data["padding"][3][batch_idx]), 
-                        (data["size"][0][batch_idx], data["size"][1][batch_idx]), 
-                        False, 
-                    )
-                    # mask = ((mask > (torch.max(mask) / 2)) * 255).numpy().astype(np.uint8)
-                    path2file = os.path.join(save_dir, data["frame_idx"][batch_idx]+".png")
-                    succeed = utils.save_image(mask.numpy().astype(np.uint8), path2file)
-                    if not succeed:
-                        log_info("Cannot save image to {}".format(path2file))
+                path2file = os.path.join(save_dir, data["frame_idx"][batch_idx]+".png")
+                succeed = utils.save_image(img.numpy().astype(np.uint8), path2file)
+                if not succeed:
+                    log_info("Cannot save image to {}".format(path2file))
 
             pbar.update()
         pbar.close()
