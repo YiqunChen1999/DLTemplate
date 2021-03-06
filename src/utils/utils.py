@@ -45,7 +45,7 @@ def log_info_wrapper(msg, logger=None):
     return func_wraper
 
 
-def resize_and_pad(img, resol, is_mask):
+def resize_and_pad(img, resol, is_mask, to_tensor=True):
     r"""
     Info:
         Resize and pad image with zeros.
@@ -86,10 +86,12 @@ def resize_and_pad(img, resol, is_mask):
         img = img.squeeze(0)
     elif dim == 2:
         img = img.squeeze(0).squeeze(0)
-    if org_type == "Ndarray":
-        img = img.numpy()
     assert img.shape[-2: ] == resol, "Resolution error."
     assert len(img.shape) == dim, "Dimension inconsistent."
+    if to_tensor:
+        return img, (padding_left, padding_right, padding_top, padding_bottom)
+    if org_type == "Ndarray":
+        img = img.numpy()
     return img, (padding_left, padding_right, padding_top, padding_bottom)
 
 
@@ -169,7 +171,7 @@ def get_spatial_feats(resol, device):
     return spatial_feats
 
 
-def get_coord(mask, normalize=True):
+def get_coord(mask, normalize=True, to_tensor=True):
     if isinstance(mask, np.ndarray):
         org_type = "Ndarray"
         mask = torch.from_numpy(mask)
@@ -191,6 +193,8 @@ def get_coord(mask, normalize=True):
     y_min /= shape[0]
     y_max /= shape[0]
     coord = torch.tensor([x_min, x_max, y_min, y_max]).unsqueeze(0)
+    if to_tensor:
+        return coord
     if org_type == "Ndarray":
         coord = coord.numpy()
     return coord

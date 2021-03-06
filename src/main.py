@@ -115,7 +115,7 @@ def main():
     for epoch in range(cfg.TRAIN.MAX_EPOCH):
         if not cfg.GENERAL.TRAIN:
             break
-        if resume_epoch > epoch:
+        if resume_epoch >= epoch:
             continue
         if cfg.GENERAL.TRAIN:
             train_one_epoch(
@@ -173,7 +173,7 @@ def main():
                     spatial_feats=spatial_feats, 
                 )
         if cfg.GENERAL.VALID:
-            inference(
+            evaluate(
                 epoch=epoch, 
                 cfg=cfg, 
                 model=model, 
@@ -186,7 +186,22 @@ def main():
                 save=cfg.SAVE.SAVE,  
                 spatial_feats=spatial_feats, 
             )
+    # End of train-valid for loop.
 
+    if cfg.GENERAL.VALID:
+        evaluate(
+            epoch=epoch, 
+            cfg=cfg, 
+            model=model, 
+            data_loader=valid_data_loader, 
+            device=device, 
+            loss_fn=loss_fn, 
+            metrics_logger=metrics_logger, 
+            phase="valid", 
+            logger=logger,
+            save=cfg.SAVE.SAVE,  
+            spatial_feats=spatial_feats, 
+        )
     if cfg.GENERAL.TEST:
         evaluate(
             epoch=epoch, 
@@ -194,6 +209,29 @@ def main():
             data_loader=test_data_loader, 
             device=device, 
             loss_fn=loss_fn, 
+            logger=logger,
+            save=cfg.SAVE.SAVE,  
+            spatial_feats=spatial_feats, 
+        )
+    
+    if cfg.GENERAL.INFER != "none":
+        if cfg.GENERAL.INFER == "train":
+            infer_data_loader = train_data_loader
+        elif cfg.GENERAL.INFER == "valid":
+            infer_data_loader = valid_data_loader
+        elif cfg.GENERAL.INFER == "test":
+            infer_data_loader = test_data_loader
+        else:
+            raise ValueError("Expect dataset for inference is one of ['train', 'valid', 'test'], but got {}".format(cfg.GENERAL.INFER))
+        evaluate(
+            epoch=epoch, 
+            cfg=cfg, 
+            model=model, 
+            data_loader=infer_data_loader, 
+            device=device, 
+            loss_fn=loss_fn, 
+            metrics_logger=metrics_logger, 
+            phase="valid", 
             logger=logger,
             save=cfg.SAVE.SAVE,  
             spatial_feats=spatial_feats, 

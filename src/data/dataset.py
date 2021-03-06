@@ -434,7 +434,7 @@ class A2DSentences(torch.utils.data.Dataset):
         path_to_item = os.path.join(self.cfg.DATA.DIR.A2DSentences, self.split, item["video"]+".hdf5")
         with h5py.File(path_to_item, 'r', libver="latest", swmr=True) as f:
             frames = f["video"][()]
-            data["size"] = np.array([int(item["height"]), int(item["width"])])
+            # data["size"] = np.array([int(item["height"]), int(item["width"])])
             mask = f["{}/masks/{}/mask".format(item["frame"], item["instance"])][()].astype(np.float32)
             data["query"] = item["query"]
             # data["text"] = f["{}/text".format(item["instance"])][()].squeeze(0)
@@ -457,6 +457,7 @@ class A2DSentences(torch.utils.data.Dataset):
         # frames = torch.from_numpy(frames)
         frames = np.concatenate([frames[0][None]]*front_padding + [frames[start: end]] + [frames[-1][None]]*back_padding)
         frames = frames.astype(np.float32)
+        data["size"] = frames.shape[-2: ]
         assert frames.shape[0] == num_frames, \
             "Number of frames error, fetching frame {} of video {}, start: {}, end: {}, front pading: {}, back padding{}, expect {} but got {}.".format(
                 data["frame_idx"], data["fn_video"], start, end, front_padding, back_padding, num_frames, frames.shape[0]
@@ -540,7 +541,7 @@ class JHMDBSentences(torch.utils.data.Dataset):
         path_to_item = os.path.join(self.cfg.DATA.DIR, self.split, item["video"]+".hdf5")
         with h5py.File(path_to_item, 'r', libver="latest", swmr=True) as f:
             frames = f["video"][()]
-            data["size"] = np.array([int(item["height"]), int(item["width"])])
+            # data["size"] = np.array([int(item["height"]), int(item["width"])])
             mask = f["{}/masks/{}/mask".format(item["frame"], item["instance"])][()].astype(np.float32)
             data["query"] = item["query"]
             # data["text"] = f["{}/text".format(item["instance"])][()].squeeze(0)
@@ -562,6 +563,7 @@ class JHMDBSentences(torch.utils.data.Dataset):
         # frames = torch.from_numpy(frames)
         frames = np.concatenate([frames[0][None]]*front_padding + [frames[start: end]] + [frames[-1][None]]*back_padding)
         frames = frames.astype(np.float32)
+        data["size"] = frames.shape[-2: ]
         assert frames.shape[0] == num_frames, \
             "Number of frames error, fetching frame {} of video {}, start: {}, end: {}, front pading: {}, back padding{}, expect {} but got {}.".format(
                 data["frame_idx"], data["fn_video"], start, end, front_padding, back_padding, num_frames, frames.shape[0]
@@ -614,9 +616,9 @@ class Dataset(torch.utils.data.Dataset):
 
 if __name__ == "__main__":
     from configs.configs import cfg
-    dataset = YRVOS2021FPS6(cfg, "train")
+    # dataset = YRVOS2021FPS6(cfg, "train")
     # dataset = YoutubeRVOS2021(cfg, "train")
-    # dataset = A2DSentences(cfg, "train")
+    dataset = A2DSentences(cfg, "train")
     # for idx in range(len(dataset)):
     #     if len(dataset.items[idx]["fns"]) != cfg.DATA.VIDEO.NUM_FRAMES:
     #         print(dataset.items[idx]["fn_video"])
@@ -627,10 +629,11 @@ if __name__ == "__main__":
         shuffle=False, 
         num_workers=4
     )
-    # pbar = tqdm(total=len(data_loader))
-    pbar = tqdm(total=len(dataset))
+    pbar = tqdm(total=len(data_loader))
+    # pbar = tqdm(total=len(dataset))
     # dataset[326]
-    for idx, data in enumerate(dataset):
+    # for idx, data in enumerate(dataset):
+    for idx, data in enumerate(data_loader):
         # if idx < 5:
         #     print(data["bert"].shape)
         pbar.update()

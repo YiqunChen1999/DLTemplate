@@ -22,6 +22,7 @@ parser.add_argument("--resume", default="false", choices=["true", "false"], type
 parser.add_argument("--train", default="true", choices=["true", "false"], type=str, required=True)
 parser.add_argument("--valid", default="true", choices=["true", "false"], type=str, required=True)
 parser.add_argument("--test", default="false", choices=["true", "false"], type=str, required=True)
+parser.add_argument("--infer", default="none", choices=["train", "valid", "test", "none"], type=str)
 parser.add_argument("--gpu", type=str, required=True)
 args = parser.parse_args()
 
@@ -35,6 +36,7 @@ cfg.GENERAL.RESUME                              =   True if args.resume == "true
 cfg.GENERAL.TRAIN                               =   True if args.train == "true" else False
 cfg.GENERAL.VALID                               =   True if args.valid == "true" else False
 cfg.GENERAL.TEST                                =   True if args.test == "true" else False
+cfg.GENERAL.INFER                               =   args.infer
 cfg.GENERAL.GPU                                 =   eval(args.gpu)
 cfg.GENERAL.PIPLINE                             =   True
 
