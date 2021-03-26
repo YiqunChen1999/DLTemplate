@@ -29,29 +29,17 @@ def inference(
     **kwargs, 
 ):
     model.eval()
-    # Prepare to log info.
-    log_info = print if logger is None else logger.log_info
-    total_loss = []
-    inference_time = []
     # Read data and evaluate and record info.
     with utils.log_info(msg="Inference", level="INFO", state=True, logger=logger):
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
-            start_time = time.time()
-            outputs = utils.inference(model=model, data=data, device=device, *args, **kwargs)
-            inference_time.append(time.time()-start_time)
+            outputs = utils.infer(model=model, data=data, device=device, *args, **kwargs)
 
             # Save results to directory.
             for batch_idx in range(outs.shape[0]):
-                save_dir = os.path.join(cfg.SAVE.DIR, phase, data["fn_video"][batch_idx])
-                if not os.path.exists(save_dir):
-                    os.makedirs(save_dir)
-                path2file = os.path.join(save_dir, data["frame_idx"][batch_idx]+".png")
-                succeed = utils.save_image(img.numpy().astype(np.uint8), path2file)
-                if not succeed:
-                    log_info("Cannot save image to {}".format(path2file))
+                # Save results to directory.
+                utils.raise_error(NotImplementedError, "Not implemented")            
 
             pbar.update()
         pbar.close()
-    log_info("Runtime per image: {:<5} seconds.".format(round(sum(inference_time)/len(inference_time), 4)))
 

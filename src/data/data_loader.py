@@ -20,9 +20,11 @@ from .dataset import _DATASET
 def build_dataset(cfg, dataset, split):
     return _DATASET[dataset](cfg, split)
     
+    
 def build_data_loader(cfg, dataset, split):
+    with utils.log_info(msg="Build data loader of {} set for {}".format(split, dataset))
     shuffle = True if split == "train" else False
-    num_workers = cfg.DATA.NUMWORKERS
+    num_workers = cfg.DATA.NUM_WORKERS
     dataset = build_dataset(cfg, dataset, split)
     data_loader = torch.utils.data.DataLoader(
         dataset=dataset, 

@@ -12,17 +12,54 @@ import torch.nn.functional as F
 from PIL import Image
 import numpy as np
 import cv2
+from termcolor import colored
+
+
+def notify(msg="", level="INFO", logger=None, fp=None):
+    level = level.upper()
+    if level == "WARNING":
+        level = "[" + colored("{:<8}".format(level), "yellow") + "]"
+    elif level == "ERROR":
+        level = "[" + colored("{:<8}".format(level), "red")    + "]"
+    elif level == "INFO":
+        level = "[" + colored("{:<8}".format(level), "blue")   + "]"
+
+    msg = "[{:<20}] {:<8} {}".format(time.asctime(), level, msg)
+        
+    _notify = print if logger is None else logger.log_info
+    _notify(msg)
+    
+    if fp is None:
+        return
+    elif isinstance(fp, str):
+        try:
+            with open(fp, 'a') as _fp:
+                _fp.write(msg)
+        except:
+            notify(msg="Failed to write message to file {}".format(fp), level="WARNING")
+    else:
+        try:
+            fp.write(msg)
+        except:
+            notify(msg="Failed to write message to file.", level="WARNING")
 
 
 @contextlib.contextmanager
 def log_info(msg="", level="INFO", state=False, logger=None):
-    log = print if logger is None else logger.log_info
-    _state = "[{:<8}]".format("RUNNING") if state else ""
-    log("[{:<20}] [{:<8}] {} {}".format(time.asctime(), level, _state, msg))
+    _state = "[" + colored("{:<8}".format("RUNNING"), "green") + "]" if state else ""
+    notify(msg="{} {}".format(_state, msg), level=level, logger=logger)
     yield
     if state:
-        _state = "[{:<8}]".format("DONE") if state else ""
-        log("[{:<20}] [{:<8}] {} {}".format(time.asctime(), level, _state, msg))
+        _state = "[" + colored("{:<8}".format("DONE"), "green") + "]" if state else ""
+        notify(msg="{} {}".format(_state, msg), level=level, logger=logger)
+
+
+inform = notify
+
+
+def raise_error(exc, msg):
+    notify(msg=msg, level="ERROR")
+    raise exc(msg)
 
 
 def log_info_wrapper(msg, logger=None):
@@ -35,11 +72,8 @@ def log_info_wrapper(msg, logger=None):
         """
         @functools.wraps(func)
         def wrapped_func(*args, **kwargs):
-            # log = print if logger is None else logger.log_info
-            # log("[{:<20}] [{:<8}]".format(time.asctime(), "RUNNING"), msg)
             with log_info(msg=msg, level="INFO", state=True, logger=logger):
                 res = func(*args, **kwargs)
-            # log("[{:<20}] [{:<8}]".format(time.asctime(), "DONE"), msg)
             return res
         return wrapped_func
     return func_wraper
@@ -65,7 +99,7 @@ def resize_and_pad(img, resol, is_mask, to_tensor=True):
     elif isinstance(img, torch.Tensor):
         org_type = "Tensor"
     else:
-        raise TypeError("Unexpected img type {}".format(type(img)))
+        raise_error(TypeError, "Unexpected img type {}".format(type(img)))
     img = img.type(torch.float)
     if dim == 2:
         img = img.unsqueeze(0).unsqueeze(0)
@@ -113,7 +147,7 @@ def crop_and_resize(img, padding, resol, is_mask):
     elif isinstance(img, torch.Tensor):
         org_type = "Tensor"
     else:
-        raise TypeError("Unsupported image type {}".format(type(img)))
+        raise_error(TypeError, "Unsupported image type {}".format(type(img)))
     org_dim = len(img.shape)
     if org_dim == 2:
         img = img.unsqueeze(0).unsqueeze(0)
@@ -143,7 +177,7 @@ def crop_and_resize(img, padding, resol, is_mask):
     return img
 
 
-def inference(model, data, device, infer_only=True, *args, **kwargs):
+def infer(model, data, device, infer_only=True, *args, **kwargs):
     r"""
     Info:
         Inference once, without calculate any loss.
@@ -155,28 +189,13 @@ def inference(model, data, device, infer_only=True, *args, **kwargs):
     Returns:
         - out (Tensor): predicted.
     """
-    def _inference_V1(model, data, device, infer_only=True, *args, **kwargs):
-        frames = data["frames"]
-        batch_size = frames.shape[0]
-        bert = data["bert"]
-        
-        frames, bert = frames.to(device), bert.to(device)
-
-        # mask_s, mask_m, mask_l = model(txt, frames, **kwargs)
-        outputs = model(bert, frames, **kwargs)
-
-        if infer_only:
-            for k in outputs.keys():
-                if "mask" in k:
-                    outputs[k] = torch.sigmoid(outputs[k])
-                    outputs[k] = ((outputs[k] > (torch.max(outputs[k]) / 2)) * 255.)
-
-        return outputs
+    def _infer_V1(model, data, device, infer_only=True, *args, **kwargs):
+        raise_error(NotImplementedError, "Not implemented yet.")
 
     return _inference_V1(model, data, device, infer_only, *args, **kwargs) 
 
 
-def inference_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
+def infer_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
     r"""
     Info:
         Execute inference and calculate loss, sychronize the train and evaluate progress. 
@@ -190,38 +209,15 @@ def inference_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
         - loss (Tensor): calculated loss.
     """
     def _infer_and_calc_loss_V1(model, data, loss_fn, device, *args, **kwargs):
-        outputs = inference(model, data, device, False, *args, **kwargs)
-
-        gt_mask_s, gt_mask_m, gt_mask_l = data["mask_s"].to(device), data["mask_m"].to(device), data["mask_l"].to(device)
-        gt_mask_s, gt_mask_m, gt_mask_l = gt_mask_s.reshape(-1, gt_mask_s.shape[-2], gt_mask_s.shape[-1]), gt_mask_m.reshape(-1, gt_mask_m.shape[-2], gt_mask_m.shape[-1]), gt_mask_l.reshape(-1, gt_mask_l.shape[-2],gt_mask_l.shape[-1])
-
-        batch_size = gt_mask_s.shape[0]
-        gt_bbox_s = torch.cat([get_coord(gt_mask_s[i]) for i in range(batch_size)], dim=0).to(device)
-        gt_bbox_m = torch.cat([get_coord(gt_mask_m[i]) for i in range(batch_size)], dim=0).to(device)
-        gt_bbox_l = torch.cat([get_coord(gt_mask_l[i]) for i in range(batch_size)], dim=0).to(device)
-        
-        targets = {
-            "gt_mask_s": gt_mask_s, "gt_mask_m": gt_mask_m, "gt_mask_l": gt_mask_l, 
-            "gt_bbox_s": gt_bbox_s, "gt_bbox_m": gt_bbox_m, "gt_bbox_l": gt_bbox_l, 
-        }
-        loss = loss_fn(outputs, targets)
-
-        for k in outputs.keys():
-            if "mask" in k:
-                outputs[k] = torch.sigmoid(outputs[k])
-                outputs[k] = ((outputs[k] > (torch.max(outputs[k]) / 2)) * 255.)
-        for k in targets.keys():
-            if "mask" in k:
-                assert torch.max(targets[k]) <= 1, "Value error."
-                targets[k] = targets[k] * 255.
-
-        return outputs, targets, loss
+        raise_error(NotImplementedError, "Not implemented yet")
 
     return _infer_and_calc_loss_V1(model, data, loss_fn, device, *args, **kwargs)
 
 
-def calc_and_record_metrics(phase, epoch, outputs, targets, metrics_logger, multi_frames=False, require_resize=False, padding=None, size=None, logger=None, *args, **kwargs):
-    raise NotImplementedError("Function calc_and_record_metrics is not implemented.")
+def calc_and_record_metrics(phase, epoch, outputs, targets, metrics_handler):
+    batch_size = outputs.shape[0]
+    for bs in range(batch_size):
+        metrics_handler.update(phase, epoch, outputs[bs], targets[bs])
 
 
 def rgb2hsv(image: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
@@ -238,11 +234,11 @@ def rgb2hsv(image: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
         >>> output = rgb2hsv(input)  # 2x3x4x5
     """
     if not isinstance(image, torch.Tensor):
-        raise TypeError("Input type is not a torch.Tensor. Got {}".format(
+        raise_error(TypeError, "Input type is not a torch.Tensor. Got {}".format(
             type(image)))
 
     if len(image.shape) < 3 or image.shape[-3] != 3:
-        raise ValueError("Input size must have a shape of (*, 3, H, W). Got {}"
+        raise_error(ValueError, "Input size must have a shape of (*, 3, H, W). Got {}"
                          .format(image.shape))
 
     # The first or last occurance is not guarenteed before 1.6.0
@@ -409,7 +405,7 @@ def resize(img: torch.Tensor, size: list or tuple, logger=None):
     elif len(org_shape) == 4:
         pass
     else:
-        raise NotImplementedError("Function to deal with image with shape {} is not implememted yet.".format(org_shape))
+        raise_error(NotImplementedError, "Function to deal with image with shape {} is not implememted yet.".format(org_shape))
     img = F.interpolate(img, size=size, mode="bilinear", align_corners=False)
     # img = img.reshape(org_shape)
     return img
@@ -429,7 +425,7 @@ def set_device(model: torch.nn.Module, gpu_list: list, logger=None):
                 device = torch.device("cuda:{}".format(gpu_list[0]))
                 model = model.to(device)
         elif len(gpu_list) > 1:
-            raise NotImplementedError("Multi-GPU mode is not implemented yet.")
+            raise_error(NotImplementedError, "Multi-GPU mode is not implemented yet.")
     return model, device
 
 
@@ -480,7 +476,6 @@ def pack_code(cfg, logger=None):
             ))
             try_make_path_exists(path2des)
             os.system("cp -r {} {}".format(path2src, path2des))
-    # raise NotImplementedError("Function pack_code is not implemented yet.")
 
 
 

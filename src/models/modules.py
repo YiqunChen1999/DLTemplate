@@ -19,12 +19,12 @@ from utils import utils
 class MyModule(nn.Module):
     def __init__(self, *args, **kwargs):
         super(MyModule, self).__init__()
-        self._build()
+        self._build_()
 
-    def _build(self):
-        raise NotImplementedError("")
+    def _build_(self):
+        utils.raise_error(NotImplementedError, "MyModule is not implemented")
 
     def forward(self, inp):
-        raise NotImplementedError("")
+        utils.raise_error(NotImplementedError, "MyModule is not implemented")
 
 

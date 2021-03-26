@@ -1,6 +1,6 @@
 opencv-python>=4.2.0
 h5py>=2.10.0
-attribdict>=0.0.5
+alphaconfig>=0.0.2
 numpy>=1.18.1
 tqdm>=4.50.0
 matplotlib>=3.3.2

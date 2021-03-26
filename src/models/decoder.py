@@ -37,14 +37,14 @@ class Decoder(torch.nn.Module):
         self.cfg = cfg
         self.args = args
         self.kwargs = kwargs
-        self._build()
+        self._build_()
 
-    def _build(self):
-        raise NotImplementedError("")
+    def _build_(self):
+        utils.raise_error(NotImplementedError, "Decoder is not implemented")
 
-    def forward(self, text_repr, video_repr, *args, **kwargs):
-        raise NotImplementedError("")
-        return outputs
+    def forward(self, inp, *args, **kwargs):
+        utils.raise_error(NotImplementedError, "Decoder is not implemented")
+        return out
 
 
 

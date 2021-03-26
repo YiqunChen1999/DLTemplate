@@ -6,24 +6,18 @@ Docs:
 """
 
 import os, sys, copy, argparse
-from attribdict import AttribDict as Dict
+from alphaconfig import AlphaConfig
 
-configs = Dict()
+configs = AlphaConfig()
 cfg = configs
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--id", type=str, required=True)
-parser.add_argument("--dataset", type=str, required=True)
-parser.add_argument("--data_size", type=float, default=0.1)
-parser.add_argument("--batch_size", type=int, required=True)
-parser.add_argument("--lr", type=float, default=5e-4)
-parser.add_argument("--max_epoch", type=int, default=20, required=True)
-parser.add_argument("--resume", default="false", choices=["true", "false"], type=str, required=True)
-parser.add_argument("--train", default="true", choices=["true", "false"], type=str, required=True)
-parser.add_argument("--valid", default="true", choices=["true", "false"], type=str, required=True)
-parser.add_argument("--test", default="false", choices=["true", "false"], type=str, required=True)
-parser.add_argument("--infer", default="none", choices=["train", "valid", "test", "none"], type=str)
-parser.add_argument("--gpu", type=str, required=True)
+parser.add_argument("--id",                             type=str,   required=True)
+parser.add_argument("--batch_size",                     type=int,   required=True)
+parser.add_argument("--lr",         default=1e-4,       type=float, required=True)
+parser.add_argument("--max_epoch",  default=20,         type=int,   required=True)
+parser.add_argument("--resume",     default="false",    type=str,   required=True,  choices=["true", "false"])
+parser.add_argument("--gpu",                            type=str,   required=True)
 args = parser.parse_args()
 
 # ================================ 
@@ -33,60 +27,86 @@ cfg.GENERAL.ROOT                                =   os.path.join(os.getcwd(), ".
 cfg.GENERAL.ID                                  =   "{}".format(args.id)
 cfg.GENERAL.BATCH_SIZE                          =   args.batch_size
 cfg.GENERAL.RESUME                              =   True if args.resume == "true" else False
-cfg.GENERAL.TRAIN                               =   True if args.train == "true" else False
-cfg.GENERAL.VALID                               =   True if args.valid == "true" else False
-cfg.GENERAL.TEST                                =   True if args.test == "true" else False
-cfg.GENERAL.INFER                               =   args.infer
 cfg.GENERAL.GPU                                 =   eval(args.gpu)
+cfg.GENERAL.CHECK_EPOCHS                        =   range(int(args.max_epoch*0.6), args.max_epoch, int(args.max_epoch*0.1))
 cfg.GENERAL.PIPLINE                             =   True
+cfg.GENERAL.INFER_VERSION                       =   "0"
 
 # ================================ 
 # MODEL
 # ================================ 
-cfg.MODEL.CKPT_DIR                              =   os.path.join(cfg.GENERAL.ROOT, "checkpoints", cfg.GENERAL.ID)
-cfg.MODEL.PATH2CKPT                             =   os.path.join(cfg.MODEL.CKPT_DIR, "{}.pth".format(cfg.GENERAL.ID))
-cfg.MODEL.ENCODER.ARCH                          =   "" # TODO
+cfg.MODEL.DIR2CKPT                              =   os.path.join(cfg.GENERAL.ROOT, "checkpoints", cfg.GENERAL.ID)
+cfg.MODEL.PATH2CKPT                             =   os.path.join(cfg.MODEL.DIR2CKPT, "{}.pth".format(cfg.GENERAL.ID))
+cfg.MODEL.ENCODER.ARCH                          =   "" 
 cfg.MODEL.DECODER.ARCH                          =   ""
 
 # ================================ 
 # DATA
 # ================================ 
 cfg.DATA.DIR                                    =   {
-    "Dataset": "/path/to/dataset", 
+    "DATASET1": "/path/to/dataset1",
+    "DATASET2": "/path/to/dataset2", 
 }
-cfg.DATA.NUMWORKERS                             =   4
-cfg.DATA.DATASET                                =   args.dataset 
-cfg.DATA.RANDOM_SAMPLE_RATIO                    =   args.data_size
+cfg.DATA.NUM_WORKERS                            =   4
+cfg.DATA.DATASETS                               =   ["DATASET1", "DATASET2"]
+# ======== DATASET1 ========
+cfg.DATA.DATASET1.TRAIN                         =   True
+cfg.DATA.DATASET1.VALIE                         =   True
+cfg.DATA.DATASET1.TEST                          =   True
+cfg.DATA.DATASET1.INFER                         =   ["valid", "test"]
+cfg.DATA.DATASET1.DATA_RATIO                    =   1.0
+# ======== DATASET2 ========
+cfg.DATA.DATASET2.TRAIN                         =   False
+cfg.DATA.DATASET2.VALIE                         =   True
+cfg.DATA.DATASET2.TEST                          =   True
+cfg.DATA.DATASET2.INFER                         =   ["valid", "test"]
+cfg.DATA.DATASET2.DATA_RATIO                    =   1.0
 
 # ================================ 
 # OPTIMIZER
 # ================================ 
 cfg.OPTIMIZER.OPTIMIZER                         =   "Adam" 
-cfg.OPTIMIZER.LR                                =   args.lr 
-cfg.OPTIMIZER.FINETUNE_FACTOR                   =   1.0
+# ========      Adam        ========
+cfg.OPTIMIZER.Adam.LR                           =   args.lr
+cfg.OPTIMIZER.Adam.FINETUNE                     =   1.0
+cfg.OPTIMIZER.Adam.WEIGHT_DECAY                 =   0.0
+# ========      AdamW       ========
+cfg.OPTIMIZER.AdamW.LR                          =   args.lr
+cfg.OPTIMIZER.AdamW.FINETUNE                    =   1.0
+cfg.OPTIMIZER.AdamW.WEIGHT_DECAY                =   0.1
 
 # ================================ 
-# SCHEDULER
+# TRAIN
 # ================================ 
 cfg.TRAIN.MAX_EPOCH                             =   args.max_epoch 
-cfg.TRAIN.RANDOM_SAMPLE_RATIO                   =   args.data_size 
 
 # ================================ 
 # SCHEDULER
 # ================================ 
 cfg.SCHEDULER.SCHEDULER                         =   "LinearLRScheduler" # ["LinearLRScheduler", "StepLRScheduler"]
-cfg.SCHEDULER.UPDATE_EPOCH                      =   range(int(cfg.TRAIN.MAX_EPOCH*0.1), cfg.TRAIN.MAX_EPOCH, int(cfg.TRAIN.MAX_EPOCH*0.1))
-cfg.SCHEDULER.UPDATE_COEFF                      =   0.5
-cfg.SCHEDULER.MIN_LR                            =   2.5e-6
-cfg.SCHEDULER.WARMUP_EPOCHS                     =   0
+# ========      LinearLRScheduler       ========
+cfg.SCHEDULER.LinearLRScheduler.MIN_LR          =   2.5E-6
+cfg.SCHEDULER.LinearLRScheduler.WARMUP_EPOCHS   =   0
+# ========      StepLRScheduler         ========
+cfg.SCHEDULER.StepLRScheduler.UPDATE_EPOCH      =   range(int(cfg.TRAIN.MAX_EPOCH*0.1), cfg.TRAIN.MAX_EPOCH, int(cfg.TRAIN.MAX_EPOCH*0.1))
+cfg.SCHEDULER.StepLRScheduler.UPDATE_COEFF      =   0.5
 
 # ================================ 
 # LOSS_FN
 # ================================ 
-cfg.LOSS_FN.LOSS_FN                             =   "MaskBCEBBoxMSELoss" 
-cfg.LOSS_FN.WEIGHTS                             =   {
-    "POS_WEIGHT": 1.5, "BBOX_COEFF": 1.5, 
-}
+cfg.LOSS_FN.LOSS_FN                             =   "MSELoss" # ["MSELoss", "MAELoss"]
+# ========      MSELoss     ========
+cfg.LOSS_FN.MSELoss.WEIGHT1                     =   1.0
+cfg.LOSS_FN.MSELoss.WEIGHT2                     =   1.0
+# ========      MAELoss     ========
+cfg.LOSS_FN.MAELoss.WEIGHT1                     =   1.0
+cfg.LOSS_FN.MAELoss.WEIGHT2                     =   1.0
+
+# ================================ 
+# METRICS
+# ================================ 
+cfg.METRICS                                     =   ["ssim", "psnr"]
+
 
 # ================================ 
 # LOG
@@ -100,14 +120,19 @@ cfg.SAVE.SAVE                                   =   True
 cfg.LOG.DIR                                     =   os.path.join(os.path.join(cfg.GENERAL.ROOT, "logs", cfg.GENERAL.ID))
    
 
+# ================================ 
+# CHECK
+# ================================ 
+cfg.cvt_state(read_only=True)
+
 assert cfg.DATA.DATASET in cfg.DATA.DIR.keys(), "Unknown dataset {}".format(cfg.DATA.DATASET)
 
 _paths = [
     cfg.LOG.DIR, 
-    cfg.MODEL.CKPT_DIR, 
+    cfg.MODEL.DIR2CKPT, 
     cfg.SAVE.DIR, 
 ]
-_paths.extend(list(cfg.DATA.DIR.as_dict().values()))
+_paths.extend(list(cfg.DATA.DIR.cvt2dict().values()))
 
 for _path in _paths:
     if not os.path.exists(_path):

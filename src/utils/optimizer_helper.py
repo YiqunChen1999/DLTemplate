@@ -13,7 +13,7 @@ import torch, torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import utils
+from . import utils
 
 _OPTIMIZER = {}
 
@@ -23,16 +23,16 @@ def add_optimizer(optim_func):
 
 @add_optimizer
 def SGD(cfg, model):
-    lr = cfg.OPTIMIZER.LR
-    momentum = cfg.OPTIMIZER.MOMENTUM if cfg.OPTIMIZER.hasattr("MOMENTUM") else 0
-    dampening = cfg.OPTIMIZER.DAMPENING if cfg.OPTIMIZER.hasattr("DAMPENING") else 0
-    weight_decay = cfg.OPTIMIZER.WEIGHT_DECAY if cfg.OPTIMIZER.hasattr("WEIGHT_DECAY") else 0
-    nesterov = cfg.OPTIMIZER.NESTEROV if cfg.OPTIMIZER.hasattr("NESTEROV") else False
+    lr = cfg.OPTIMIZER.SGD.LR
+    momentum = cfg.OPTIMIZER.SGD.MOMENTUM if hasattr(cfg.OPTIMIZER.SGD, "MOMENTUM") else 0
+    dampening = cfg.OPTIMIZER.SGD.DAMPENING if hasattr(cfg.OPTIMIZER.SGD, "DAMPENING") else 0
+    weight_decay = cfg.OPTIMIZER.SGD.WEIGHT_DECAY if hasattr(cfg.OPTIMIZER.SGD, "WEIGHT_DECAY") else 0
+    nesterov = cfg.OPTIMIZER.SGD.NESTEROV if hasattr(cfg.OPTIMIZER.SGD, "NESTEROV") else False
+    finetune = cfg.OPTIMIZER.SGD.FINETUNE if hasattr(cfg.TRAIN.OPTIMIZER.SGD, "FINETUNE") else 1.0
     optimizer = torch.optim.SGD(
         [
-            {"params": model.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR}, 
+            {"params": model.encoder.parameters(), "lr": lr * finetune}, 
             {"params": model.decoder.parameters(), "lr": lr}, 
-            # {"params": model.backbone.parameters(), "lr": lr}, 
         ], 
         lr=lr, 
         momentum=momentum, 
@@ -40,22 +40,22 @@ def SGD(cfg, model):
         weight_decay=weight_decay, 
         nesterov=nesterov, 
     )
-    raise NotImplementedError("Optimizer SGD is not implemented yet.")
+    utils.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
     return optimizer
 
 
 @add_optimizer
 def Adam(cfg, model):
-    lr = cfg.OPTIMIZER.LR
-    weight_decay = cfg.OPTIMIZER.WEIGHT_DECAY if cfg.OPTIMIZER.hasattr("WEIGHT_DECAY") else 0
-    betas = cfg.OPTIMIZER.BETAS if cfg.OPTIMIZER.hasattr("BETAS") else (0.9, 0.999)
-    eps = cfg.OPTIMIZER.EPS if cfg.OPTIMIZER.hasattr("EPS") else 1E-8
-    amsgrad = cfg.OPTIMIZER.AMSGRAD if cfg.OPTIMIZER.hasattr("AMSGRAD") else False
-    finetune_lr_factor = cfg.TRAIN.OPTIMIZER.FINETUNE_FACTOR if cfg.TRAIN.OPTIMIZER.hasattr("FINETUNE_FACTOR") else 1.0
+    lr = cfg.OPTIMIZER.Adam.LR
+    weight_decay = cfg.OPTIMIZER.Adam.WEIGHT_DECAY if hasattr(cfg.OPTIMIZER.Adam, "WEIGHT_DECAY") else 0
+    betas = cfg.OPTIMIZER.Adam.BETAS if hasattr(cfg.OPTIMIZER.Adam, "BETAS") else (0.9, 0.999)
+    eps = cfg.OPTIMIZER.Adam.EPS if hasattr(cfg.OPTIMIZER.Adam, "EPS") else 1E-8
+    amsgrad = cfg.OPTIMIZER.Adam.AMSGRAD if hasattr(cfg.OPTIMIZER.Adam, "AMSGRAD") else False
+    finetune = cfg.OPTIMIZER.Adam.FINETUNE if hasattr(cfg.OPTIMIZER.Adam, "FINETUNE") else 1.0
     if hasattr(model, "device_ids"):
         optimizer = torch.optim.Adam(
             [
-                {"params": model.module.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR},  
+                {"params": model.module.encoder.parameters(), "lr": lr * finetune},  
                 {'params': model.module.decoder.parameters()}, 
             ], 
             lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
@@ -63,25 +63,26 @@ def Adam(cfg, model):
     else:
         optimizer = torch.optim.Adam(
             [
-                {"params": model.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR}, 
+                {"params": model.encoder.parameters(), "lr": lr * finetune}, 
                 {'params': model.decoder.parameters()}, 
             ], 
             lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
         )
-
+    utils.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
     return optimizer
 
 
 @add_optimizer
 def AdamW(cfg, model):
-    lr = cfg.OPTIMIZER.LR
-    weight_decay = cfg.OPTIMIZER.WEIGHT_DECAY if cfg.OPTIMIZER.hasattr("WEIGHT_DECAY") else 0.01
-    betas = cfg.OPTIMIZER.BETAS if cfg.OPTIMIZER.hasattr("BETAS") else (0.9, 0.999)
-    eps = cfg.OPTIMIZER.EPS if cfg.OPTIMIZER.hasattr("EPS") else 1E-8
-    amsgrad = cfg.OPTIMIZER.AMSGRAD if cfg.OPTIMIZER.hasattr("AMSGRAD") else False
+    lr = cfg.OPTIMIZER.AdamW.LR
+    weight_decay = cfg.OPTIMIZER.AdamW.WEIGHT_DECAY if hasattr(cfg.OPTIMIZER.AdamW, "WEIGHT_DECAY") else 0.01
+    betas = cfg.OPTIMIZER.AdamW.BETAS if hasattr(cfg.OPTIMIZER.AdamW, "BETAS") else (0.9, 0.999)
+    eps = cfg.OPTIMIZER.AdamW.EPS if hasattr(cfg.OPTIMIZER.AdamW, "EPS") else 1E-8
+    amsgrad = cfg.OPTIMIZER.AdamW.AMSGRAD if hasattr(cfg.OPTIMIZER.AdamW, "AMSGRAD") else False
+    finetune = cfg.OPTIMIZER.AdamW.FINETUNE if hasattr(cfg.OPTIMIZER.AdamW, "FINETUNE") else 1.0
     optimizer = torch.optim.AdamW(
         [
-            {"params": model.encoder.parameters(), "lr": lr * cfg.OPTIMIZER.LR_FACTOR}, 
+            {"params": model.encoder.parameters(), "lr": lr * finetune}, 
             {"params": model.decoder.parameters(), "lr": lr}, 
         ], 
         lr=lr, 
@@ -90,10 +91,15 @@ def AdamW(cfg, model):
         weight_decay=weight_decay, 
         amsgrad=amsgrad, 
     )
+    utils.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
     return optimizer
 
 
-def build_optimizer(cfg, model, *args, **kwargs):
-    optimizer = _OPTIMIZER[cfg.OPTIMIZER.OPTIMIZER](cfg, model)
-    # raise NotImplementedError("Function build_optimizer is not implemented.")
+def build_optimizer(cfg, model, logger=None, *args, **kwargs):
+    if cfg.OPTIMIZER.OPTIMIZER not in _OPTIMIZER.keys():
+        utils.raise_error(NotImplementedError, "The expected optimizer %s is not implemented" % cfg.OPTIMIZER.OPTIMIZER)
+    if cfg.OPTIMIZER.OPTIMIZER not in cfg.OPTIMIZER.keys():
+        utils.raise_error(AttributeError, "Configurations for the expected optimizer %s is required" % cfg.OPTIMIZER.OPTIMIZER)
+    with utils.log_info(msg="Build optimizer", level="INFO", state=True, logger=logger):
+        optimizer = _OPTIMIZER[cfg.OPTIMIZER.OPTIMIZER](cfg, model)
     return optimizer

@@ -37,12 +37,12 @@ class MSELoss:
     def _build(self):
         self.loss_fn = nn.MSELoss()
 
-    def cal_loss(self, output, target):
+    def calc_loss(self, output, target):
         loss = self.loss_fn(output, target)
         return loss
 
     def __call__(self, output, target):
-        return self.cal_loss(output, target)
+        return self.calc_loss(output, target)
 
 
 @add_loss_fn
@@ -55,12 +55,12 @@ class MAELoss:
     def _build(self):
         self.loss_fn = nn.L1Loss()
     
-    def cal_loss(self, output, target):
+    def calc_loss(self, output, target):
         loss = self.loss_fn(output, target)
         return loss
 
     def __call__(self, output, target):
-        return self.cal_loss(output, target)
+        return self.calc_loss(output, target)
         
 
 @add_loss_fn
@@ -72,14 +72,15 @@ class MyLossFn:
     def _build(self):
         raise NotImplementedError("LossFn is not implemented yet.")
 
-    def cal_loss(self, out, target):
+    def calc_loss(self, out, target):
         raise NotImplementedError("LossFn is not implemented yet.")
 
     def __call__(self, out, target):
-        return self.cal_loss(out, target)
+        return self.calc_loss(out, target)
 
 
-def build_loss_fn(cfg, *args, **kwargs):
+def build_loss_fn(cfg, logger=None, *args, **kwargs):
+    with utils.log_info(msg="Build loss function", level="INFO", state=True, logger=logger)
     return _LOSS_FN[cfg.LOSS_FN.LOSS_FN](cfg, *args, **kwargs)
 
 

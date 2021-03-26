@@ -26,34 +26,34 @@ def train_one_epoch(
     loss_fn, 
     optimizer: torch.optim.Optimizer, 
     lr_scheduler, 
-    metrics_logger, 
+    metrics_handler, 
     logger=None, 
     *args, 
     **kwargs, 
 ):
     model.train()
     #  Prepare to log info.
-    log_info = print if logger is None else logger.log_info
-    total_loss = []
     #  Read data and train and record info.
     data_loader.dataset.update()
-    with utils.log_info(msg="TRAIN at epoch: {}, lr: {:<5}".format(str(epoch).zfill(3), optimizer.param_groups[0]["lr"]), level="INFO", state=True, logger=logger):
+    msg = "TRAIN at epoch: {}, lr: {:<5}".format(str(epoch).zfill(3), optimizer.param_groups[0]["lr"])
+    with utils.log_info(msg=msg, level="INFO", state=True, logger=logger):
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
             optimizer.zero_grad()
-            outputs, loss = utils.inference_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device, *args, **kwargs)
-            loss.backward(); optimizer.step()
-            total_loss.append(loss.detach().cpu().item())
+            outputs, loss = utils.infer_and_calc_loss(model=model, data=data, loss_fn=loss_fn, device=device, *args, **kwargs)
+            loss.backward()
+            optimizer.step()
 
-            metrics_logger.record("train", epoch, "loss", loss.detach().cpu().item())
-            utils.calc_and_record_metrics(
-                "train", epoch, outputs, targets, metrics_logger, 
-            )
+            cur_loss = loss.detach().cpu().item()
+            avg_loss = metrics_handler.update("train", epoch, "loss", cur_loss)
+            utils.calc_and_record_metrics("train", epoch, outputs, targets, metrics_handler)
 
-            pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(epoch, cfg.TRAIN.MAX_EPOCH, round(sum(total_loss)/len(total_loss), 5), round(total_loss[-1], 5)))
+            pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(
+                epoch, cfg.TRAIN.MAX_EPOCH, round(avg_loss, 6), round(cur_loss, 6)
+            ))
             pbar.update()
         lr_scheduler.step()
         pbar.close()
-    metrics_logger.summarize("train", log_info)
+    metrics_handler.summarize("train")
     return
     # TODO  Return some info.

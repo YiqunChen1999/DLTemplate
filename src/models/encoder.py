@@ -31,14 +31,14 @@ class Encoder(nn.Module):
         self.cfg = cfg
         self.args = args
         self.kwargs = kwargs
-        self._build()
+        self._build_()
 
-    def _build(self):
-        raise NotImplementedError("")
+    def _build_(self):
+        utils.raise_error(NotImplementedError, "Encoder is not implemented")
     
-    def forward(self, frames, text_repr, *args, **kwargs):
-        raise NotImplementedError("")
-        return video_repr
+    def forward(self, inp, *args, **kwargs):
+        utils.raise_error(NotImplementedError, "Encoder is not implemented")
+        return out
 
 
 

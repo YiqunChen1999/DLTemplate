@@ -32,9 +32,9 @@ class Model(nn.Module):
         self.decoder = _DECODER[self.cfg.MODEL.DECODER.ARCH](self.cfg)
         self.encoder = _ENCODER[self.cfg.MODEL.ENCODER.ARCH](self.cfg)
 
-    def forward(self, text, frames, *args, **kwargs):
-        raise NotImplementedError("")
-        return outs
+    def forward(self, inp, *args, **kwargs):
+        utils.raise_error(NotImplementedError, "Model is not implemented")
+        return out
 
 
 
