@@ -1,7 +1,9 @@
 
 r"""
-Author  Yiqun Chen
-Docs    Main functition to run program.
+Author:
+    Yiqun Chen
+Docs:
+    Main functition to run program.
 """
 
 import sys, os, copy

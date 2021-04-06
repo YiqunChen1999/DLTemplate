@@ -4,8 +4,6 @@ Author:
     Yiqun Chen
 Docs:
     Metrics.
-Note: 
-    Adapted from https://github.com/fperazzi/davis-2017
 """
 
 import os, sys, copy, torch
