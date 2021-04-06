@@ -22,14 +22,14 @@ def build_dataset(cfg, dataset, split):
     
     
 def build_data_loader(cfg, dataset, split):
-    with utils.log_info(msg="Build data loader of {} set for {}".format(split, dataset))
-    shuffle = True if split == "train" else False
-    num_workers = cfg.DATA.NUM_WORKERS
-    dataset = build_dataset(cfg, dataset, split)
-    data_loader = torch.utils.data.DataLoader(
-        dataset=dataset, 
-        batch_size=cfg.GENERAL.BATCH_SIZE, 
-        shuffle=shuffle, 
-        num_workers=num_workers
-    )
+    with utils.log_info(msg="Build data loader of {} set for {}".format(split, dataset)):
+        shuffle = True if split == "train" else False
+        num_workers = cfg.DATA.NUM_WORKERS
+        dataset = build_dataset(cfg, dataset, split)
+        data_loader = torch.utils.data.DataLoader(
+            dataset=dataset, 
+            batch_size=cfg.GENERAL.BATCH_SIZE if split == "train" else 1, 
+            shuffle=shuffle, 
+            num_workers=num_workers
+        )
     return data_loader

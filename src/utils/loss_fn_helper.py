@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import torch.fft
 
 from utils import utils
+from utils import metrics
 
 _LOSS_FN = {}
 
@@ -64,6 +65,47 @@ class MAELoss:
         
 
 @add_loss_fn
+class SSIMLoss:
+    def __init__(self, cfg, *args, **kwargs):
+        super(SSIMLoss, self).__init__()
+        self.cfg = cfg
+        self._build()
+
+    def _build(self):
+        self.device = torch.device("cpu" if len(self.cfg.GENERAL.GPU) == 0 else "cuda:"+str(self.cfg.GENERAL.GPU[0]))
+
+    def calc_loss(self, output, target):
+        loss = 1 - metrics.calc_ssim(output, target, data_range=1.0, multichannel=True, device=self.device)
+        return loss
+
+    def __call__(self, output, target):
+        return self.calc_loss(output, target)
+
+
+@add_loss_fn
+class MSESSIMLoss:
+    def __init__(self, cfg, *args, **kwargs):
+        super(MSESSIMLoss, self).__init__()
+        self.cfg = cfg
+        # self.weights = self.cfg.LOSS_FN.WEIGHTS
+        self._build()
+
+    def _build(self):
+        self.loss_fn_mse = MSELoss(self.cfg)
+        self.loss_fn_ssim = SSIMLoss(self.cfg)
+        assert "MSE" in self.cfg.LOSS_FN.MSESSIMLoss.keys() and "SSIM" in self.cfg.LOSS_FN.MSESSIMLoss.keys(), "Weights of loss are not found"
+
+    def calc_loss(self, output, target):
+        loss_mse = self.loss_fn_mse(output, target)
+        loss_ssim = self.loss_fn_ssim(output, target)
+        loss = self.cfg.LOSS_FN.MSESSIMLoss.MSE * loss_mse + self.cfg.LOSS_FN.MSESSIMLoss.SSIM * loss_ssim
+        return loss
+
+    def __call__(self, output, target):
+        return self.calc_loss(output, target)
+
+
+@add_loss_fn
 class MyLossFn:
     def __init__(self, *args, **kwargs):
         super(MyLossFn, self).__init__()
@@ -80,7 +122,8 @@ class MyLossFn:
 
 
 def build_loss_fn(cfg, logger=None, *args, **kwargs):
-    with utils.log_info(msg="Build loss function", level="INFO", state=True, logger=logger)
-    return _LOSS_FN[cfg.LOSS_FN.LOSS_FN](cfg, *args, **kwargs)
+    with utils.log_info(msg="Build loss function", level="INFO", state=True, logger=logger):
+        loss_fn = _LOSS_FN[cfg.LOSS_FN.LOSS_FN](cfg, *args, **kwargs)
+    return loss_fn
 
 

@@ -68,7 +68,6 @@ def Adam(cfg, model):
             ], 
             lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad
         )
-    utils.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
     return optimizer
 
 

@@ -10,7 +10,7 @@ import os, sys, logging, time
 sys.path.append(os.path.join(sys.path[0], ".."))
 sys.path.append(os.path.join(os.getcwd(), "src"))
 import torch, torchvision
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 import copy
 
 
@@ -21,7 +21,9 @@ class Logger:
     def __init__(self, cfg, *args, **kwargs):
         self.cfg = cfg
         self.path2logfile = os.path.join(cfg.LOG.DIR, "{}.log".format(cfg.GENERAL.ID))
-        logging.basicConfig(filename=self.path2logfile, level=logging.INFO, format="%(message)s")
+        self.enable_file_log = True
+        if self.enable_file_log:
+            logging.basicConfig(filename=self.path2logfile, level=logging.INFO, format="%(message)s")
         self._build_()
 
     def _build_(self):
@@ -35,14 +37,16 @@ class Logger:
             str(t.tm_min).zfill(2), 
         ))
         self.metrics = dict()
-        self.writer = SummaryWriter(log_dir=self.path2runs)
+        # self.writer = SummaryWriter(log_dir=self.path2runs)
 
     def log_info(self, msg):
-        logging.info(msg)
+        if self.enable_file_log:
+            logging.info(msg)
         print(msg)
 
     def close(self):
-        self.writer.close()
+        # self.writer.close()
+        pass
 
 
 if __name__ == "__main__":

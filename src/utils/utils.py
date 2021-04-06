@@ -13,6 +13,9 @@ from PIL import Image
 import numpy as np
 import cv2
 from termcolor import colored
+import skimage
+import skimage.metrics
+from torchvision import transforms
 
 
 def notify(msg="", level="INFO", logger=None, fp=None):
@@ -77,6 +80,140 @@ def log_info_wrapper(msg, logger=None):
             return res
         return wrapped_func
     return func_wraper
+
+
+@functools.lru_cache
+def gen_spatial_map(batch_size, dim, height, width, device=torch.device("cpu")):
+    y = torch.linspace(-1, 1, height).unsqueeze(1)
+    x = torch.linspace(-1, 1, width).unsqueeze(0)
+    x = x.repeat(height, 1).unsqueeze(2).unsqueeze(0).unsqueeze(0)
+    y = y.repeat(1, width).unsqueeze(2).unsqueeze(0).unsqueeze(0)
+    spatial_map = torch.cat([x, y], dim=4).repeat(batch_size, dim, 1, 1, 1)
+    spatial_map = spatial_map.to(device)
+    return spatial_map
+
+
+def calc_psnr(img1, img2, data_range, *args, **kwargs):
+    r"""
+    Info:
+        img1 (Tensor): 
+        img2 (Tensor): 
+        data_range (float): the possible max value of input image.
+    """
+    # skimage.metrics.peak_signal_noise_ratio implementation.
+    def calc_psnr_np(img1, img2, data_range, *args, **kwargs):
+        psnr = skimage.metrics.peak_signal_noise_ratio(img1, img2, data_range)
+        return psnr
+ 
+    def calc_psnr_pt(img1, img2, data_range, *args, **kwargs):
+        err = F.mse_loss(img1, img2)
+        psnr = 10 * torch.log10((data_range ** 2) / err)
+        return psnr
+
+    if data_range <= 0:
+        raise ValueError("Expect a positive number for input data range, but got {}".format(data_range))
+    if isinstance(img1, np.ndarray) and isinstance(img2, np.ndarray):
+        return calc_psnr_np(img1, img2, data_range, *args, **kwargs)
+    elif isinstance(img1, torch.Tensor) and isinstance(img2, torch.Tensor):
+        return calc_psnr_pt(img1, img2, data_range, *args, **kwargs)
+    else:
+        raise_error(TypeError, "Expect data types of both img1 and img2 are the same (numpy.ndarray | torch.Tensor), \
+            but got data type of img1: {}, img2: {}.".format(type(img1), type(img2)))
+
+def calc_ssim(im1, im2, data_range, multichannel=True, *args, **kwargs):
+    def calc_ssim_pt(im1, im2, data_range, multichannel=True, *args, **kwargs):
+        if not im1.shape == im2.shape:
+            utils.raise_error(AttributeError, "Shapes of im1 and im2 are not equal.")
+        device = kwargs.pop("device", torch.device("cpu"))
+        if len(im1.shape) == 3:
+            im1 = im1.unsqueeze(0)
+            im2 = im2.unsqueeze(0)
+        if im1.shape[-1] == 3:
+            im1 = im1.permute(0, 3, 1, 2)
+            im2 = im2.permute(0, 3, 1, 2)
+        channels = 3 if multichannel else 1
+        win_size = kwargs.pop("win_size", 7)
+        num_pixels = win_size ** 2
+        mean_1 = F.conv2d(im1, torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels)
+        mean_2 = F.conv2d(im2, torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels)
+        var_1 = F.conv2d((im1 ** 2), torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels) - mean_1 ** 2
+        var_2 = F.conv2d((im2 ** 2), torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels) - mean_2 ** 2
+        covar = F.conv2d((im1 * im2), torch.ones(channels, 1, win_size, win_size, device=device) / num_pixels, groups=channels) - mean_1 * mean_2
+        K1 = kwargs.pop("K1", 0.01)
+        K2 = kwargs.pop("K2", 0.03)
+        C1 = (K1 * data_range) ** 2
+        C2 = (K2 * data_range) ** 2
+        ssim = ( (2 * mean_1 * mean_2 + C1) * (2 * covar + C2) ) \
+            / ( (mean_1 ** 2 + mean_2 ** 2 + C1) * (var_1 + var_2 + C2) )
+        mssim = ssim.mean()
+        return mssim
+    
+    def calc_ssim_np(im1, im2, data_range, multichannel=True, *args, **kwargs):
+        ssim = skimage.metrics.structural_similarity(im1, im2, data_range=data_range, multichannel=multichannel, *args, **kwargs)
+        return ssim
+
+    if data_range <= 0:
+        raise ValueError("Expect a positive number for input data range, but got {}".format(data_range))
+    if isinstance(im1, np.ndarray) and isinstance(im2, np.ndarray):
+        return calc_ssim_np(im1, im2, data_range=data_range, multichannel=multichannel, *args, **kwargs)
+    elif isinstance(im1, torch.Tensor) and isinstance(im2, torch.Tensor):
+        return calc_ssim_pt(im1, im2, data_range=data_range, multichannel=multichannel, *args, **kwargs)
+    else:
+        raise_error(TypeError, "Expect data types of both im1 and im2 are the same (numpy.ndarray | torch.Tensor), \
+            but got data type of im1: {}, im2: {}.".format(type(im1), type(im2)))
+
+
+def randomly_crop_images(images, size):
+    r"""
+    Info:
+        Randomly crop images under a given size.
+    Args:
+        images (list of Tensor): a list of images, channel last, i.e., Shape(3, 512, 1024).
+        size (tuple | list): expected height and width of patches, i.e., (512, 512).
+    Returns:
+        images (list): patches cropped out from corresponding input images.
+    """
+    # Check size first.
+    in_size = torch.tensor([img.shape for img in images])
+    min_height = torch.min(in_size[:, 1])
+    min_width = torch.min(in_size[:, 2])
+    max_top = min_height - size[0]
+    max_left = min_width - size[1]
+    top = torch.randint(max_top, (1, ))
+    left = torch.randint(max_left, (1, ))
+    for idx, img in enumerate(images):
+        images[idx] = transforms.functional.crop(img, top, left, size[0], size[1])
+    out_size = torch.tensor([img.shape for img in images])
+    assert len(torch.unique(out_size)) == 2, "Shapes of patches are inconsistent."
+    return images
+
+
+def randomly_flip_and_rotate_images(images):
+    r"""
+    Info:
+        Randomly perform horizontal flipping and/or rotation of 90/180/270 degree.
+    """
+    num_imgs = len(images)
+    rint = np.random.randint(low=0, high=2)
+    if rint:
+        # Horizontal flip
+        for idx in range(num_imgs):
+            images[idx] = torch.flip(images[idx], dims=[2])
+    
+    rint = np.random.randint(low=0, high=3)
+    if rint == 0:
+        # Rotate 90 degree
+        for idx in range(num_imgs):
+            images[idx] = torch.rot90(images[idx], k=1, dims=[1, 2])
+    elif rint == 1:
+        # Rotate 180 degree
+        for idx in range(num_imgs):
+            images[idx] = torch.rot90(images[idx], k=2, dims=[1, 2])
+    elif rint == 2:
+        # Rotate 270 degree
+        for idx in range(num_imgs):
+            images[idx] = torch.rot90(images[idx], k=3, dims=[1, 2])
+    return images
 
 
 def resize_and_pad(img, resol, is_mask, to_tensor=True):
@@ -177,7 +314,7 @@ def crop_and_resize(img, padding, resol, is_mask):
     return img
 
 
-def infer(model, data, device, infer_only=True, *args, **kwargs):
+def infer(model, data, device, infer_version, infer_only, *args, **kwargs):
     r"""
     Info:
         Inference once, without calculate any loss.
@@ -189,13 +326,24 @@ def infer(model, data, device, infer_only=True, *args, **kwargs):
     Returns:
         - out (Tensor): predicted.
     """
-    def _infer_V1(model, data, device, infer_only=True, *args, **kwargs):
-        raise_error(NotImplementedError, "Not implemented yet.")
+    _INFER_FNS_ = {}
+    def add_infer_fn(infer_fn):
+        _INFER_FNS_[infer_fn.__name__] = infer_fn
+        return infer_fn
 
-    return _inference_V1(model, data, device, infer_only, *args, **kwargs) 
+    @add_infer_fn
+    def _infer_V0_(model, data, device, infer_only, *args, **kwargs):
+        high_res, low_res, = data["high_res"].to(device), data["low_res"].to(device)
+        outputs = model(high_res, low_res)
+        if infer_only:
+            outputs = torch.minimum(outputs.detach(), torch.tensor([1.0], device=outputs.device))
+        return outputs, 
 
 
-def infer_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
+    return _INFER_FNS_["_infer_V{}_".format(infer_version)](model, data, device, infer_only, *args, **kwargs) 
+
+
+def infer_and_calc_loss(model, data, loss_fn, device, infer_version, *args, **kwargs):
     r"""
     Info:
         Execute inference and calculate loss, sychronize the train and evaluate progress. 
@@ -208,16 +356,27 @@ def infer_and_calc_loss(model, data, loss_fn, device, *args, **kwargs):
         - out (Tensor): predicted.
         - loss (Tensor): calculated loss.
     """
-    def _infer_and_calc_loss_V1(model, data, loss_fn, device, *args, **kwargs):
-        raise_error(NotImplementedError, "Not implemented yet")
+    _INFER_FNS_ = {}
+    def add_infer_fn(infer_fn):
+        _INFER_FNS_[infer_fn.__name__] = infer_fn
+        return infer_fn
 
-    return _infer_and_calc_loss_V1(model, data, loss_fn, device, *args, **kwargs)
+    @add_infer_fn
+    def _infer_and_calc_loss_V0_(model, data, loss_fn, device, infer_version, *args, **kwargs):
+        trg = data["trg"].to(device)
+        outputs, *_ = infer(model, data, device, infer_version, infer_only=False, *args, **kwargs)
+        loss = loss_fn(outputs, trg)
+        outputs = torch.minimum(outputs.detach(), torch.tensor([1.0], device=outputs.device))
+        return outputs, trg, loss
 
 
-def calc_and_record_metrics(phase, epoch, outputs, targets, metrics_handler):
+    return _INFER_FNS_["_infer_and_calc_loss_V{}_".format(infer_version)](model, data, loss_fn, device, infer_version, *args, **kwargs)
+
+
+def calc_and_record_metrics(dataset, phase, epoch, outputs, targets, metrics_handler, data_range):
     batch_size = outputs.shape[0]
     for bs in range(batch_size):
-        metrics_handler.update(phase, epoch, outputs[bs], targets[bs])
+        metrics_handler.calc_metrics(dataset, phase, epoch, outputs[bs], targets[bs], data_range)
 
 
 def rgb2hsv(image: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
@@ -445,6 +604,7 @@ def set_pipline(model, cfg, logger=None):
 def try_make_path_exists(path):
     if not os.path.exists(path):
         try:
+            notify("Try to make following path exists: {}".format(path))
             os.makedirs(path)
         except:
             return False
@@ -478,8 +638,42 @@ def pack_code(cfg, logger=None):
             os.system("cp -r {} {}".format(path2src, path2des))
 
 
+def check_env(cfg, logger=None):
+    _BACKUP_EXCLUDE_ID_ = ["debug"]
+
+    def check_images_folder(path2folder):
+        with log_info("Check image folder {}".format(path2folder), state=True):
+            if not os.path.exists(path2folder):
+                raise_error(FileNotFoundError, "Failed to find folder {}".format(path2folder))
+    
+    def backup(cfg, logger=None):
+        with log_info("Performing code backup"):
+            if cfg.GENERAL.ID in _BACKUP_EXCLUDE_ID_:
+                notify("Skip current ID")
+                return
+            pack_code(cfg, logger=logger)
+
+    try_make_path_exists(cfg.LOG.DIR)
+    try_make_path_exists(cfg.MODEL.DIR2CKPT)
+    try_make_path_exists(cfg.SAVE.DIR)
+
+    for dataset in cfg.DATA.DATASETS:
+        check_images_folder(cfg.DATA[dataset].DIR)
+
+    backup(cfg, logger)
+    
+    
 
 if __name__ == "__main__":
     log_info(msg="Hello", level="INFO", state=False, logger=None)
-
+    total_time = 0
+    for idx in range(10000):
+        start_time = time.time()
+        smap = gen_spatial_map(12, 8, 512, 512)
+        total_time += time.time() - start_time
+        if idx < 10:
+            print(smap.shape)
+            print(total_time)
+    print(total_time)
+    print(gen_spatial_map.cache_info())
     

@@ -22,23 +22,23 @@ class Model(nn.Module):
     """
     The Language Guided Video Object Segmentation model
     """
-    def __init__(self, cfg, split_size=2, *args, **kwargs):
+    def __init__(self, cfg, *args, **kwargs):
         super(Model, self).__init__()
         self.cfg = cfg
-        self.split_size = split_size
         self._build_model()
     
     def _build_model(self):
-        self.decoder = _DECODER[self.cfg.MODEL.DECODER.ARCH](self.cfg)
         self.encoder = _ENCODER[self.cfg.MODEL.ENCODER.ARCH](self.cfg)
+        self.decoder = _DECODER[self.cfg.MODEL.DECODER.ARCH](self.cfg)
 
-    def forward(self, inp, *args, **kwargs):
-        utils.raise_error(NotImplementedError, "Model is not implemented")
+    def forward(self, high_reso, low_reso, *args, **kwargs):
+        bigrid = self.encoder(low_reso)
+        out = self.decoder(high_reso, bigrid)
         return out
 
 
 
 def build_model(cfg, logger=None):
     with utils.log_info(msg="Build model from configurations.", state=True, logger=logger):
-        model = RVOS(cfg, split_size=2)
+        model = Model(cfg)
     return model

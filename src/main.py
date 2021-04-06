@@ -19,10 +19,11 @@ from inference import inference
 
 def main():
     # Set logger to record information.
+    utils.check_env(cfg)
     logger = Logger(cfg)
     logger.log_info(cfg)
     metrics_handler = MetricsHandler(cfg.METRICS)
-    utils.pack_code(cfg, logger=logger)
+    # utils.pack_code(cfg, logger=logger)
 
     # Build model.
     model = model_builder.build_model(cfg=cfg, logger=logger)
@@ -46,18 +47,21 @@ def main():
     # Prepare dataset.
     train_loaders, valid_loaders, test_loaders = dict(), dict(), dict()
     for dataset in cfg.DATA.DATASETS:
-        try:
-            train_loaders[dataset] = data_loader.build_data_loader(cfg, dataset, "train")
-        except:
-            utils.notify(msg="Failed to build train loader of %s" % dataset)
-        try:
-            valid_loaders[dataset] = data_loader.build_data_loader(cfg, dataset, "valid")
-        except:
-            utils.notify(msg="Failed to build valid loader of %s" % dataset)
-        try:
-            test_loaders[dataset] = data_loader.build_data_loader(cfg, dataset, "test")
-        except:
-            utils.notify(msg="Failed to build test loader of %s" % dataset)
+        if cfg.DATA[dataset].TRAIN:
+            try:
+                train_loaders[dataset] = data_loader.build_data_loader(cfg, dataset, "train")
+            except:
+                utils.notify(msg="Failed to build train loader of %s" % dataset)
+        if cfg.DATA[dataset].VALID:
+            try:
+                valid_loaders[dataset] = data_loader.build_data_loader(cfg, dataset, "valid")
+            except:
+                utils.notify(msg="Failed to build valid loader of %s" % dataset)
+        if cfg.DATA[dataset].TEST:
+            try:
+                test_loaders[dataset] = data_loader.build_data_loader(cfg, dataset, "test")
+            except:
+                utils.notify(msg="Failed to build test loader of %s" % dataset)
 
     
     # TODO Train, evaluate model and save checkpoint.
@@ -67,7 +71,7 @@ def main():
             continue
         
         eval_kwargs = {
-            "epoch": epoch, "cfg": cfg, "model": model, "device": device, 
+            "epoch": epoch, "cfg": cfg, "model": model, "loss_fn": loss_fn, "device": device, 
             "metrics_handler": metrics_handler, "logger": logger, "save": cfg.SAVE.SAVE, 
         }
         train_kwargs = {
@@ -76,42 +80,42 @@ def main():
         }
         ckpt_kwargs = {
             "epoch": epoch, "cfg": cfg, "model": model.state_dict(), "metrics_handler": metrics_handler, 
-            "optimizer": optimizer.state_dict(), , "lr_scheduler": lr_scheduler, 
+            "optimizer": optimizer.state_dict(), "lr_scheduler": lr_scheduler.state_dict(), 
         }
 
         for dataset in cfg.DATA.DATASETS:
             if cfg.DATA[dataset].TRAIN:
                 utils.notify("Train on %s" % dataset)
-                train_one_epoch(data_loader=train_data_loader, **train_kwargs)
+                train_one_epoch(data_loader=train_loaders[dataset], **train_kwargs)
 
         utils.save_ckpt(path2file=cfg.MODEL.PATH2CKPT, **ckpt_kwargs)
 
         if epoch in cfg.GENERAL.CHECK_EPOCHS:
-            utils.save_ckpt(path2file=os.path.join(cfg.MODEL.CKPT_DIR, cfg.GENERAL.ID + "_" + str(epoch).zfill(5) + ".pth"), **ckpt_kwargs)
+            utils.save_ckpt(path2file=os.path.join(cfg.MODEL.DIR2CKPT, cfg.GENERAL.ID + "_" + str(epoch).zfill(5) + ".pth"), **ckpt_kwargs)
             for dataset in cfg.DATA.DATASETS:
                 utils.notify("Evaluating test set of %s" % dataset, logger=logger)
                 if cfg.DATA[dataset].TEST:
-                    evaluate(data_loader=test_data_loader, phase="test", **eval_kwargs)
+                    evaluate(data_loader=test_loaders[dataset], phase="test", **eval_kwargs)
 
         for dataset in cfg.DATA.DATASETS:
             utils.notify("Evaluating valid set of %s" % dataset, logger=logger)
             if cfg.DATA[dataset].VALID:
-                evaluate(data_loader=valid_data_loader, phase="valid", **eval_kwargs)
+                evaluate(data_loader=valid_loaders[dataset], phase="valid", **eval_kwargs)
     # End of train-valid for loop.
     
     eval_kwargs = {
-        "epoch": epoch, "cfg": cfg, "model": model, "device": device, 
+        "epoch": epoch, "cfg": cfg, "model": model, "loss_fn": loss_fn, "device": device, 
         "metrics_handler": metrics_handler, "logger": logger, "save": cfg.SAVE.SAVE, 
     }
 
     for dataset in cfg.DATA.DATASETS:
         if cfg.DATA[dataset].VALID:
             utils.notify("Evaluating valid set of %s" % dataset, logger=logger)
-            evaluate(data_loader=valid_data_loader, phase="valid")
+            evaluate(data_loader=valid_loaders[dataset], phase="valid", **eval_kwargs)
     for dataset in cfg.DATA.DATASETS:
         if cfg.DATA[dataset].TEST:
             utils.notify("Evaluating test set of %s" % dataset, logger=logger)
-            evaluate(data_loader=test_data_loader, phase="test")
+            evaluate(data_loader=test_loaders[dataset], phase="test", **eval_kwargs)
 
     for dataset in cfg.DATA.DATASETS:
         if "train" in cfg.DATA[dataset].INFER:

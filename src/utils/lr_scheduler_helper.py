@@ -31,10 +31,10 @@ class StepLRScheduler:
         self._build_()
 
     def _build_(self):
-        self.warmup_epochs = self.cfg.SCHEDULER.WARMUP_EPOCHS if hasattr(self.cfg.SCHEDULER, "WARMUP_EPOCHS") else 0
-        self.update_epoch = list(self.cfg.SCHEDULER.UPDATE_EPOCH)
-        self.update_coeff = self.cfg.SCHEDULER.UPDATE_COEFF
-        self.epoch = 0
+        self.warmup_epochs = self.cfg.SCHEDULER.StepLRScheduler.WARMUP_EPOCHS if hasattr(self.cfg.SCHEDULER.StepLRScheduler, "WARMUP_EPOCHS") else 0
+        self.update_epoch = list(self.cfg.SCHEDULER.StepLRScheduler.UPDATE_EPOCH)
+        self.update_coeff = self.cfg.SCHEDULER.StepLRScheduler.UPDATE_COEFF
+        self.epoch = 1
 
     def update(self):
         old_lrs = []
@@ -82,8 +82,8 @@ class LinearLRScheduler:
         self._build_()
 
     def _build_(self):
-        self.min_lr = self.cfg.SCHEDULER.MIN_LR
-        self.warmup_epochs = self.cfg.SCHEDULER.WARMUP_EPOCHS if hasattr(self.cfg.SCHEDULER, "WARMUP_EPOCHS") else 0
+        self.min_lr = self.cfg.SCHEDULER.LinearLRScheduler.MIN_LR
+        self.warmup_epochs = self.cfg.SCHEDULER.LinearLRScheduler.WARMUP_EPOCHS if hasattr(self.cfg.SCHEDULER.LinearLRScheduler, "WARMUP_EPOCHS") else 0
         self.max_epoch = self.cfg.TRAIN.MAX_EPOCH - self.warmup_epochs
         self.lr_info = [{"init_lr": param_group["lr"], "final_lr": self.min_lr} for param_group in self.optimizer.param_groups]
         if isinstance(self.min_lr, list):
@@ -91,19 +91,19 @@ class LinearLRScheduler:
                 self.lr_info[idx]["final_lr"] = self.min_lr[idx]
         for idx in range(len(self.lr_info)):
             self.lr_info[idx]["delta_lr"] = (self.lr_info[idx]["init_lr"] - self.lr_info[idx]["final_lr"]) / self.max_epoch
-        self.epoch = 0
+        self.epoch = 1
         if self.warmup_epochs > 0:
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = 1e-8
 
     def update(self):
         for idx, param_group in enumerate(self.optimizer.param_groups):
-            if self.epoch <= self.warmup_epochs:
+            if self.epoch < self.warmup_epochs:
                 param_group["lr"] = round(self.lr_info[idx]["init_lr"]*self.epoch/self.warmup_epochs, 9)
             else:
                 param_group["lr"] = round(self.lr_info[idx]["init_lr"] - (self.epoch-self.warmup_epochs) * self.lr_info[idx]["delta_lr"], 9)
-            if param_group["lr"] <= 0:
-                utils.raise_error(ValueError, "Expect positive learning rate but got "+param_group["lr"])
+            if param_group["lr"] < 0:
+                utils.raise_error(ValueError, "Expect positive learning rate but got {}".format(param_group["lr"]))
         self.epoch += 1
 
     def step(self):
