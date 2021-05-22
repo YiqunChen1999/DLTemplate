@@ -33,12 +33,12 @@ def inference(
     with utils.log_info(msg="Inference", level="INFO", state=True, logger=logger):
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
-            outputs, *_ = utils.infer(model=model, data=data, device=device, infer_version=cfg.GENERAL.INFER_VERSION, infer_only=True, *args, **kwargs)
+            outputs, *_ = utils.infer(model=model, data=data, device=device, infer_version=cfg.gnrl.infer, infer_only=True, *args, **kwargs)
 
             # Save results to directory.
             for idx_batch in range(outputs.shape[0]):
                 out = (outputs[idx_batch].detach().cpu().numpy() * 255).astype(np.uint8)
-                dir_save = os.path.join(cfg.SAVE.DIR, data_loader.dataset.dataset, phase)
+                dir_save = os.path.join(cfg.save.dir, data_loader.dataset.dataset, phase)
                 utils.try_make_path_exists(dir_save)
                 path2dest = os.path.join(dir_save, data["img_idx"][idx_batch]+".png")
                 succeed = cv2.imwrite(path2dest, out.transpose(1, 2, 0))

@@ -14,21 +14,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import utils
-from .dataset import _DATASET
+from .dataset import DATASET
 
 
 def build_dataset(cfg, dataset, split):
-    return _DATASET[dataset](cfg, split)
+    return DATASET[dataset](cfg, split)
     
     
 def build_data_loader(cfg, dataset, split):
     with utils.log_info(msg="Build data loader of {} set for {}".format(split, dataset)):
         shuffle = True if split == "train" else False
-        num_workers = cfg.DATA.NUM_WORKERS
+        num_workers = cfg.data.num_workers
         dataset = build_dataset(cfg, dataset, split)
         data_loader = torch.utils.data.DataLoader(
             dataset=dataset, 
-            batch_size=cfg.GENERAL.BATCH_SIZE if split == "train" else 1, 
+            batch_size=cfg.gnrl.batch if split == "train" else 1, 
             shuffle=shuffle, 
             num_workers=num_workers
         )

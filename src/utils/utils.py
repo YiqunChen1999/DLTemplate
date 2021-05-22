@@ -326,13 +326,13 @@ def infer(model, data, device, infer_version, infer_only, *args, **kwargs):
     Returns:
         - out (Tensor): predicted.
     """
-    _INFER_FNS_ = {}
-    def add_infer_fn(infer_fn):
-        _INFER_FNS_[infer_fn.__name__] = infer_fn
-        return infer_fn
+    FN = {}
+    def add_fn(fn):
+        FN[fn.__name__] = fn
+        return fn
 
-    @add_infer_fn
-    def _infer_V0_(model, data, device, infer_only, *args, **kwargs):
+    @add_fn
+    def fn_V0(model, data, device, infer_only, *args, **kwargs):
         high_res, low_res, = data["high_res"].to(device), data["low_res"].to(device)
         outputs = model(high_res, low_res)
         if infer_only:
@@ -340,7 +340,7 @@ def infer(model, data, device, infer_version, infer_only, *args, **kwargs):
         return outputs, 
 
 
-    return _INFER_FNS_["_infer_V{}_".format(infer_version)](model, data, device, infer_only, *args, **kwargs) 
+    return FN["fn_V{}".format(infer_version)](model, data, device, infer_only, *args, **kwargs) 
 
 
 def infer_and_calc_loss(model, data, loss_fn, device, infer_version, *args, **kwargs):
@@ -356,13 +356,13 @@ def infer_and_calc_loss(model, data, loss_fn, device, infer_version, *args, **kw
         - out (Tensor): predicted.
         - loss (Tensor): calculated loss.
     """
-    _INFER_FNS_ = {}
-    def add_infer_fn(infer_fn):
-        _INFER_FNS_[infer_fn.__name__] = infer_fn
-        return infer_fn
+    FN = {}
+    def add_fn(fn):
+        FN[fn.__name__] = fn
+        return fn
 
-    @add_infer_fn
-    def _infer_and_calc_loss_V0_(model, data, loss_fn, device, infer_version, *args, **kwargs):
+    @add_fn
+    def fn_V0(model, data, loss_fn, device, infer_version, *args, **kwargs):
         trg = data["trg"].to(device)
         outputs, *_ = infer(model, data, device, infer_version, infer_only=False, *args, **kwargs)
         loss = loss_fn(outputs, trg)
@@ -370,7 +370,7 @@ def infer_and_calc_loss(model, data, loss_fn, device, infer_version, *args, **kw
         return outputs, trg, loss
 
 
-    return _INFER_FNS_["_infer_and_calc_loss_V{}_".format(infer_version)](model, data, loss_fn, device, infer_version, *args, **kwargs)
+    return FN["fn_V{}".format(infer_version)](model, data, loss_fn, device, infer_version, *args, **kwargs)
 
 
 def calc_and_record_metrics(dataset, phase, epoch, outputs, targets, metrics_handler, data_range):
@@ -588,19 +588,6 @@ def set_device(model: torch.nn.Module, gpu_list: list, logger=None):
     return model, device
 
 
-def set_pipline(model, cfg, logger=None):
-    # log_info = log_info if logger is None else logger.log_info
-    assert cfg.GENERAL.PIPLINE, "Not pipline model."
-    gpu_list = cfg.GENERAL.GPU
-    assert len(gpu_list) == 2, "Please specify 2 GPUs for pipline setting."
-    with log_info(msg="Set pipline model.", level="INFO", state=True, logger=logger):
-        device = torch.device("cuda:{}".format(gpu_list[0]))
-        model.video_encoder.to(device)
-        model.text_encoder.to(device)
-        model.decoder.to(torch.device("cuda:{}".format(gpu_list[1])))
-    return model, device
-
-
 def try_make_path_exists(path):
     if not os.path.exists(path):
         try:
@@ -617,11 +604,11 @@ def save_ckpt(path2file, logger=None, **ckpt):
 
 
 def pack_code(cfg, logger=None):
-    src_dir = cfg.GENERAL.ROOT
+    src_dir = cfg.gnrl.root
     src_items = [
         "src"
     ]
-    des_dir = cfg.LOG.DIR
+    des_dir = cfg.log.dir
     with log_info(msg="Pack items {} from ROOT to {}".format(src_items, des_dir), level="INFO", state=True, logger=logger):
         t = time.localtime()
         for item in src_items:
@@ -648,17 +635,17 @@ def check_env(cfg, logger=None):
     
     def backup(cfg, logger=None):
         with log_info("Performing code backup"):
-            if cfg.GENERAL.ID in _BACKUP_EXCLUDE_ID_:
+            if cfg.gnrl.id in _BACKUP_EXCLUDE_ID_:
                 notify("Skip current ID")
                 return
             pack_code(cfg, logger=logger)
 
-    try_make_path_exists(cfg.LOG.DIR)
-    try_make_path_exists(cfg.MODEL.DIR2CKPT)
-    try_make_path_exists(cfg.SAVE.DIR)
+    try_make_path_exists(cfg.log.dir)
+    try_make_path_exists(cfg.model.ckpts)
+    try_make_path_exists(cfg.save.dir)
 
-    for dataset in cfg.DATA.DATASETS:
-        check_images_folder(cfg.DATA[dataset].DIR)
+    for dataset in cfg.data.datasets:
+        check_images_folder(cfg.data[dataset].DIR)
 
     backup(cfg, logger)
     

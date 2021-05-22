@@ -16,10 +16,10 @@ import torch.nn.functional as F
 from utils import utils
 from .modules import *
 
-_ENCODER = {}
+ENCODER = {}
 
 def add_encoder(encoder):
-    _ENCODER[encoder.__name__] = encoder
+    ENCODER[encoder.__name__] = encoder
     return encoder
 
 

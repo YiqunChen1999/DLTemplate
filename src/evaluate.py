@@ -39,14 +39,14 @@ def evaluate(
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
             outputs, targets, loss = utils.infer_and_calc_loss(
-                model=model, data=data, loss_fn=loss_fn, device=device, infer_version=cfg.GENERAL.INFER_VERSION, *args, **kwargs
+                model=model, data=data, loss_fn=loss_fn, device=device, infer_version=cfg.gnrl.infer, *args, **kwargs
             )
 
             if save:
                 # Save results to directory.
                 for idx_batch in range(outputs.shape[0]):
                     out = (outputs[idx_batch].detach().cpu().numpy() * 255).astype(np.uint8)
-                    dir_save = os.path.join(cfg.SAVE.DIR, data_loader.dataset.dataset, phase)
+                    dir_save = os.path.join(cfg.save.dir, data_loader.dataset.dataset, phase)
                     utils.try_make_path_exists(dir_save)
                     path2dest = os.path.join(dir_save, data["img_idx"][idx_batch]+".png")
                     succeed = cv2.imwrite(path2dest, out.transpose(1, 2, 0))
@@ -58,7 +58,7 @@ def evaluate(
             utils.calc_and_record_metrics(data_loader.dataset.dataset, phase, epoch, outputs, targets, metrics_handler, 1.0)
 
             pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(
-                epoch, cfg.TRAIN.MAX_EPOCH, round(avg_loss, 6), round(cur_loss, 6)
+                epoch, cfg.train.max_epoch, round(avg_loss, 6), round(cur_loss, 6)
             ))
             pbar.update()
         pbar.close()

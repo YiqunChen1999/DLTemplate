@@ -15,10 +15,10 @@ import torch.nn.functional as F
 
 from . import utils
 
-_SCHEDULER = {}
+SCHEDULER = {}
 
 def add_scheduler(scheduler):
-    _SCHEDULER[scheduler.__name__] = scheduler
+    SCHEDULER[scheduler.__name__] = scheduler
     return scheduler
 
 
@@ -31,9 +31,9 @@ class StepLRScheduler:
         self._build_()
 
     def _build_(self):
-        self.warmup_epochs = self.cfg.SCHEDULER.StepLRScheduler.WARMUP_EPOCHS if hasattr(self.cfg.SCHEDULER.StepLRScheduler, "WARMUP_EPOCHS") else 0
-        self.update_epoch = list(self.cfg.SCHEDULER.StepLRScheduler.UPDATE_EPOCH)
-        self.update_coeff = self.cfg.SCHEDULER.StepLRScheduler.UPDATE_COEFF
+        self.warmup = self.cfg.scheduler.StepLRScheduler.warmup if hasattr(self.cfg.scheduler.StepLRScheduler, "WARMUP_EPOCHS") else 0
+        self.update_epoch = list(self.cfg.scheduler.StepLRScheduler.update_epoch)
+        self.update_coeff = self.cfg.scheduler.StepLRScheduler.update_coeff
         self.epoch = 1
 
     def update(self):
@@ -56,7 +56,7 @@ class StepLRScheduler:
         state_dict = {
             "cfg": self.cfg, 
             "cnt": self.epoch, 
-            "warmup_epochs": self.warmup_epochs, 
+            "warmup_epochs": self.warmup, 
             "update_epoch": self.update_epoch, 
             "update_coeff": self.update_coeff, 
         }
@@ -65,7 +65,7 @@ class StepLRScheduler:
     def load_state_dict(self, state_dict: dict):
         self.cfg = state_dict.pop("cfg", self.cfg)
         self.epoch = state_dict.pop("cnt", self.epoch)
-        self.warmup_epochs = state_dict.pop("warmup_epochs", self.warmup_epochs)
+        self.warmup = state_dict.pop("warmup_epochs", self.warmup)
         self.update_coeff = state_dict.pop("update_coeff", self.update_coeff)
         self.update_epoch = state_dict.pop("update_epoch", self.update_epoch)
         
@@ -82,9 +82,9 @@ class LinearLRScheduler:
         self._build_()
 
     def _build_(self):
-        self.min_lr = self.cfg.SCHEDULER.LinearLRScheduler.MIN_LR
-        self.warmup_epochs = self.cfg.SCHEDULER.LinearLRScheduler.WARMUP_EPOCHS if hasattr(self.cfg.SCHEDULER.LinearLRScheduler, "WARMUP_EPOCHS") else 0
-        self.max_epoch = self.cfg.TRAIN.MAX_EPOCH - self.warmup_epochs
+        self.min_lr = self.cfg.scheduler.LinearLRScheduler.min_lr
+        self.warmup = self.cfg.scheduler.LinearLRScheduler.warmup if hasattr(self.cfg.scheduler.LinearLRScheduler, "WARMUP_EPOCHS") else 0
+        self.max_epoch = self.cfg.train.max_epoch - self.warmup
         self.lr_info = [{"init_lr": param_group["lr"], "final_lr": self.min_lr} for param_group in self.optimizer.param_groups]
         if isinstance(self.min_lr, list):
             for idx in range(len(self.lr_info)):
@@ -92,16 +92,16 @@ class LinearLRScheduler:
         for idx in range(len(self.lr_info)):
             self.lr_info[idx]["delta_lr"] = (self.lr_info[idx]["init_lr"] - self.lr_info[idx]["final_lr"]) / self.max_epoch
         self.epoch = 1
-        if self.warmup_epochs > 0:
+        if self.warmup > 0:
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = 1e-8
 
     def update(self):
         for idx, param_group in enumerate(self.optimizer.param_groups):
-            if self.epoch < self.warmup_epochs:
-                param_group["lr"] = round(self.lr_info[idx]["init_lr"]*self.epoch/self.warmup_epochs, 9)
+            if self.epoch < self.warmup:
+                param_group["lr"] = round(self.lr_info[idx]["init_lr"]*self.epoch/self.warmup, 9)
             else:
-                param_group["lr"] = round(self.lr_info[idx]["init_lr"] - (self.epoch-self.warmup_epochs) * self.lr_info[idx]["delta_lr"], 9)
+                param_group["lr"] = round(self.lr_info[idx]["init_lr"] - (self.epoch-self.warmup) * self.lr_info[idx]["delta_lr"], 9)
             if param_group["lr"] < 0:
                 utils.raise_error(ValueError, "Expect positive learning rate but got {}".format(param_group["lr"]))
         self.epoch += 1
@@ -116,7 +116,7 @@ class LinearLRScheduler:
             "min_lr": self.min_lr, 
             "max_epoch": self.max_epoch, 
             "lr_info": self.lr_info,
-            "warmup_epochs": self.warmup_epochs, 
+            "warmup_epochs": self.warmup, 
         }
         return state_dict
 
@@ -126,7 +126,7 @@ class LinearLRScheduler:
         self.min_lr = state_dict.pop("min_lr", self.min_lr)
         self.max_epoch = state_dict.pop("max_epoch", self.max_epoch)
         self.lr_info = state_dict.pop("lr_info", self.lr_info)
-        self.warmup_epochs = state_dict.pop("warmup_epochs", self.warmup_epochs)
+        self.warmup = state_dict.pop("warmup_epochs", self.warmup)
 
     def sychronize(self, epoch):
         self.epoch = epoch
@@ -134,4 +134,4 @@ class LinearLRScheduler:
 
 def build_scheduler(cfg, optimizer, logger=None, *args, **kwargs):
     with utils.log_info(msg="Build learning rate scheduler", level="INFO", state=True, logger=logger):
-        return _SCHEDULER[cfg.SCHEDULER.SCHEDULER](cfg, optimizer, *args, **kwargs)
+        return SCHEDULER[cfg.scheduler.scheduler](cfg, optimizer, *args, **kwargs)

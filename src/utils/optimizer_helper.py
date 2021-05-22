@@ -15,20 +15,20 @@ import torch.nn.functional as F
 
 from . import utils
 
-_OPTIMIZER = {}
+OPTIMIZER = {}
 
 def add_optimizer(optim_func):
-    _OPTIMIZER[optim_func.__name__] = optim_func
+    OPTIMIZER[optim_func.__name__] = optim_func
     return optim_func
 
 @add_optimizer
 def SGD(cfg, model):
-    lr = cfg.OPTIMIZER.SGD.LR
-    momentum = cfg.OPTIMIZER.SGD.MOMENTUM if hasattr(cfg.OPTIMIZER.SGD, "MOMENTUM") else 0
-    dampening = cfg.OPTIMIZER.SGD.DAMPENING if hasattr(cfg.OPTIMIZER.SGD, "DAMPENING") else 0
-    weight_decay = cfg.OPTIMIZER.SGD.WEIGHT_DECAY if hasattr(cfg.OPTIMIZER.SGD, "WEIGHT_DECAY") else 0
-    nesterov = cfg.OPTIMIZER.SGD.NESTEROV if hasattr(cfg.OPTIMIZER.SGD, "NESTEROV") else False
-    finetune = cfg.OPTIMIZER.SGD.FINETUNE if hasattr(cfg.TRAIN.OPTIMIZER.SGD, "FINETUNE") else 1.0
+    lr = cfg.optim.SGD.LR
+    momentum = cfg.optim.SGD.MOMENTUM if hasattr(cfg.optim.SGD, "MOMENTUM") else 0
+    dampening = cfg.optim.SGD.DAMPENING if hasattr(cfg.optim.SGD, "DAMPENING") else 0
+    weight_decay = cfg.optim.SGD.WEIGHT_DECAY if hasattr(cfg.optim.SGD, "WEIGHT_DECAY") else 0
+    nesterov = cfg.optim.SGD.NESTEROV if hasattr(cfg.optim.SGD, "NESTEROV") else False
+    finetune = cfg.optim.SGD.FINETUNE if hasattr(cfg.train.OPTIMIZER.SGD, "FINETUNE") else 1.0
     optimizer = torch.optim.SGD(
         [
             {"params": model.encoder.parameters(), "lr": lr * finetune}, 
@@ -46,12 +46,12 @@ def SGD(cfg, model):
 
 @add_optimizer
 def Adam(cfg, model):
-    lr = cfg.OPTIMIZER.Adam.LR
-    weight_decay = cfg.OPTIMIZER.Adam.WEIGHT_DECAY if hasattr(cfg.OPTIMIZER.Adam, "WEIGHT_DECAY") else 0
-    betas = cfg.OPTIMIZER.Adam.BETAS if hasattr(cfg.OPTIMIZER.Adam, "BETAS") else (0.9, 0.999)
-    eps = cfg.OPTIMIZER.Adam.EPS if hasattr(cfg.OPTIMIZER.Adam, "EPS") else 1E-8
-    amsgrad = cfg.OPTIMIZER.Adam.AMSGRAD if hasattr(cfg.OPTIMIZER.Adam, "AMSGRAD") else False
-    finetune = cfg.OPTIMIZER.Adam.FINETUNE if hasattr(cfg.OPTIMIZER.Adam, "FINETUNE") else 1.0
+    lr = cfg.optim.Adam.lr
+    weight_decay = cfg.optim.Adam.weight_decay if hasattr(cfg.optim.Adam, "WEIGHT_DECAY") else 0
+    betas = cfg.optim.Adam.BETAS if hasattr(cfg.optim.Adam, "BETAS") else (0.9, 0.999)
+    eps = cfg.optim.Adam.EPS if hasattr(cfg.optim.Adam, "EPS") else 1E-8
+    amsgrad = cfg.optim.Adam.AMSGRAD if hasattr(cfg.optim.Adam, "AMSGRAD") else False
+    finetune = cfg.optim.Adam.finetune if hasattr(cfg.optim.Adam, "FINETUNE") else 1.0
     if hasattr(model, "device_ids"):
         optimizer = torch.optim.Adam(
             [
@@ -73,12 +73,12 @@ def Adam(cfg, model):
 
 @add_optimizer
 def AdamW(cfg, model):
-    lr = cfg.OPTIMIZER.AdamW.LR
-    weight_decay = cfg.OPTIMIZER.AdamW.WEIGHT_DECAY if hasattr(cfg.OPTIMIZER.AdamW, "WEIGHT_DECAY") else 0.01
-    betas = cfg.OPTIMIZER.AdamW.BETAS if hasattr(cfg.OPTIMIZER.AdamW, "BETAS") else (0.9, 0.999)
-    eps = cfg.OPTIMIZER.AdamW.EPS if hasattr(cfg.OPTIMIZER.AdamW, "EPS") else 1E-8
-    amsgrad = cfg.OPTIMIZER.AdamW.AMSGRAD if hasattr(cfg.OPTIMIZER.AdamW, "AMSGRAD") else False
-    finetune = cfg.OPTIMIZER.AdamW.FINETUNE if hasattr(cfg.OPTIMIZER.AdamW, "FINETUNE") else 1.0
+    lr = cfg.optim.AdamW.lr
+    weight_decay = cfg.optim.AdamW.weight_decay if hasattr(cfg.optim.AdamW, "WEIGHT_DECAY") else 0.01
+    betas = cfg.optim.AdamW.BETAS if hasattr(cfg.optim.AdamW, "BETAS") else (0.9, 0.999)
+    eps = cfg.optim.AdamW.EPS if hasattr(cfg.optim.AdamW, "EPS") else 1E-8
+    amsgrad = cfg.optim.AdamW.AMSGRAD if hasattr(cfg.optim.AdamW, "AMSGRAD") else False
+    finetune = cfg.optim.AdamW.finetune if hasattr(cfg.optim.AdamW, "FINETUNE") else 1.0
     optimizer = torch.optim.AdamW(
         [
             {"params": model.encoder.parameters(), "lr": lr * finetune}, 
@@ -95,10 +95,10 @@ def AdamW(cfg, model):
 
 
 def build_optimizer(cfg, model, logger=None, *args, **kwargs):
-    if cfg.OPTIMIZER.OPTIMIZER not in _OPTIMIZER.keys():
-        utils.raise_error(NotImplementedError, "The expected optimizer %s is not implemented" % cfg.OPTIMIZER.OPTIMIZER)
-    if cfg.OPTIMIZER.OPTIMIZER not in cfg.OPTIMIZER.keys():
-        utils.raise_error(AttributeError, "Configurations for the expected optimizer %s is required" % cfg.OPTIMIZER.OPTIMIZER)
+    if cfg.optim.optim not in _OPTIMIZER.keys():
+        utils.raise_error(NotImplementedError, "The expected optimizer %s is not implemented" % cfg.optim.optim)
+    if cfg.optim.optim not in cfg.optim.keys():
+        utils.raise_error(AttributeError, "Configurations for the expected optimizer %s is required" % cfg.optim.optim)
     with utils.log_info(msg="Build optimizer", level="INFO", state=True, logger=logger):
-        optimizer = _OPTIMIZER[cfg.OPTIMIZER.OPTIMIZER](cfg, model)
+        optimizer = OPTIMIZER[cfg.optim.optim](cfg, model)
     return optimizer

@@ -20,10 +20,10 @@ from .modules import (
     MFCNModuleV2, 
 )
 
-_DECODER = {}
+DECODER = {}
 
 def add_decoder(decoder):
-    _DECODER[decoder.__name__] = decoder
+    DECODER[decoder.__name__] = decoder
     return decoder
 
 

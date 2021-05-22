@@ -41,7 +41,7 @@ def train_one_epoch(
         for idx, data in enumerate(data_loader):
             optimizer.zero_grad()
             outputs, targets, loss = utils.infer_and_calc_loss(
-                model=model, data=data, loss_fn=loss_fn, device=device, infer_version=cfg.GENERAL.INFER_VERSION, *args, **kwargs
+                model=model, data=data, loss_fn=loss_fn, device=device, infer_version=cfg.gnrl.infer, *args, **kwargs
             )
             loss.backward()
             optimizer.step()
@@ -51,7 +51,7 @@ def train_one_epoch(
             utils.calc_and_record_metrics(data_loader.dataset.dataset, "train", epoch, outputs.detach(), targets.detach(), metrics_handler, 1.0)
 
             pbar.set_description("Epoch: {:>3} / {:<3}, avg loss: {:<5}, cur loss: {:<5}".format(
-                epoch, cfg.TRAIN.MAX_EPOCH, round(avg_loss, 6), round(cur_loss, 6)
+                epoch, cfg.train.max_epoch, round(avg_loss, 6), round(cur_loss, 6)
             ))
             pbar.update()
         lr_scheduler.step()

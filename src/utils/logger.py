@@ -20,7 +20,7 @@ class Logger:
     """
     def __init__(self, cfg, *args, **kwargs):
         self.cfg = cfg
-        self.path2logfile = os.path.join(cfg.LOG.DIR, "{}.log".format(cfg.GENERAL.ID))
+        self.path2logfile = os.path.join(cfg.log.dir, "{}.log".format(cfg.gnrl.id))
         self.enable_file_log = True
         if self.enable_file_log:
             logging.basicConfig(filename=self.path2logfile, level=logging.INFO, format="%(message)s")
@@ -29,7 +29,7 @@ class Logger:
     def _build_(self):
         t = time.gmtime()
         self.path2runs = os.path.join("{}/{}/Mon{}Day{}Hour{}Min{}".format(
-            self.cfg.LOG.DIR, 
+            self.cfg.log.dir, 
             "runs", 
             str(t.tm_mon).zfill(2), 
             str(t.tm_mday).zfill(2), 

@@ -16,10 +16,10 @@ import torch.nn.functional as F
 from . import utils
 from alphaconfig import AlphaConfig
 
-_METRICS_ = {}
+METRICS_ = {}
 
 def add_metric_handler(metric_handler):
-    _METRICS_[metric_handler.__name__.replace("calc_", "")] = metric_handler
+    METRICS_[metric_handler.__name__.replace("calc_", "")] = metric_handler
     return metric_handler
 
 
@@ -47,12 +47,12 @@ class MetricsHandler:
         self.metrics = AlphaConfig()
         self._items_ = []
         for m in metrics:
-            if m not in _METRICS_.keys():
+            if m not in METRICS.keys():
                 utils.raise_error(NotImplementedError, "Handler of metric {} is not in implemented metrics set {}".format(m, _METRICS_))
             self._items_.append(m)
 
     def register(self, metric):
-        if m not in _METRICS_.keys():
+        if m not in METRICS.keys():
             utils.raise_error(NotImplementedError, "Handler of metric {} is not in implemented metrics set {}".format(m, _METRICS_))
         self._items_.append(m)
 
@@ -76,7 +76,7 @@ class MetricsHandler:
     def calc_metrics(self, dataset, phase, epoch, out, trg, data_range, *args, **kwargs):
         kwargs["device"] = out.device
         for metric in self._items_:
-            value = _METRICS_[metric](out, trg, data_range=data_range, *args, **kwargs)
+            value = METRICS[metric](out, trg, data_range=data_range, *args, **kwargs)
             self.update(dataset, phase, epoch, metric, value)
         return self.metrics[dataset][phase][epoch]
 

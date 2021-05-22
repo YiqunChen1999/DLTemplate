@@ -14,8 +14,8 @@ from torch import nn
 import torch.nn.functional as F
 
 from utils import utils
-from .encoder import _ENCODER
-from .decoder import _DECODER
+from .encoder import ENCODER
+from .decoder import DECODER
 
 
 class Model(nn.Module):
@@ -28,8 +28,8 @@ class Model(nn.Module):
         self._build_model()
     
     def _build_model(self):
-        self.encoder = _ENCODER[self.cfg.MODEL.ENCODER.ARCH](self.cfg)
-        self.decoder = _DECODER[self.cfg.MODEL.DECODER.ARCH](self.cfg)
+        self.encoder = ENCODER[self.cfg.model.enc.arch](self.cfg)
+        self.decoder = DECODER[self.cfg.model.dec.arch](self.cfg)
 
     def forward(self, high_reso, low_reso, *args, **kwargs):
         bigrid = self.encoder(low_reso)

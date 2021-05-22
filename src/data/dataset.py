@@ -19,10 +19,10 @@ from tqdm import tqdm
 
 from utils import utils
 
-_DATASET = {}
+DATASET = {}
 
 def add_dataset(dataset):
-    _DATASET[dataset.__name__] = dataset
+    DATASET[dataset.__name__] = dataset
     return dataset
 
 
@@ -65,7 +65,7 @@ class BaseDataset(torch.utils.data.Dataset):
 
     def update(self):
         if self.split in ["train"]:
-            k = int(len(self.items) * self.cfg.DATA[self.dataset].DATA_RATIO)
+            k = int(len(self.items) * self.cfg.data[self.dataset].DATA_RATIO)
             random_samples_idx = sorted(random.sample(range(0, len(self.items)), k))
             self.random_indexes = {idx: random_samples_idx[idx] for idx in range(k)}
         elif self.split in ["valid", "test"]:
