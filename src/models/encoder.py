@@ -15,6 +15,7 @@ import torch.nn.functional as F
 
 from utils import utils
 from .modules import *
+from utils.logger import logger
 
 ENCODER = {}
 
@@ -34,10 +35,10 @@ class Encoder(nn.Module):
         self._build_()
 
     def _build_(self):
-        utils.raise_error(NotImplementedError, "Encoder is not implemented")
+        logger.raise_error(NotImplementedError, "Encoder is not implemented")
     
     def forward(self, inp, *args, **kwargs):
-        utils.raise_error(NotImplementedError, "Encoder is not implemented")
+        logger.raise_error(NotImplementedError, "Encoder is not implemented")
         return out
 
 

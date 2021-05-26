@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from utils import utils
+from utils.logger import logger
 
 @torch.enable_grad()
 def train_one_epoch(
@@ -36,7 +37,7 @@ def train_one_epoch(
     #  Read data and train and record info.
     data_loader.dataset.update()
     msg = "TRAIN at epoch: {}, lr: {:<5}".format(str(epoch).zfill(3), optimizer.param_groups[0]["lr"])
-    with utils.log_info(msg=msg, level="INFO", state=True, logger=logger):
+    with logger.log_info(msg=msg, level="INFO", state=True, logger=logger):
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
             optimizer.zero_grad()

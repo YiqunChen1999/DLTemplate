@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from . import utils
+from .logger import logger
 
 OPTIMIZER = {}
 
@@ -40,7 +41,7 @@ def SGD(cfg, model):
         weight_decay=weight_decay, 
         nesterov=nesterov, 
     )
-    utils.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
+    logger.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
     return optimizer
 
 
@@ -90,15 +91,15 @@ def AdamW(cfg, model):
         weight_decay=weight_decay, 
         amsgrad=amsgrad, 
     )
-    utils.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
+    logger.raise_error(NotImplementedError, "Optimizer SGD is not implemented yet.")
     return optimizer
 
 
 def build_optimizer(cfg, model, logger=None, *args, **kwargs):
     if cfg.optim.optim not in _OPTIMIZER.keys():
-        utils.raise_error(NotImplementedError, "The expected optimizer %s is not implemented" % cfg.optim.optim)
+        logger.raise_error(NotImplementedError, "The expected optimizer %s is not implemented" % cfg.optim.optim)
     if cfg.optim.optim not in cfg.optim.keys():
-        utils.raise_error(AttributeError, "Configurations for the expected optimizer %s is required" % cfg.optim.optim)
-    with utils.log_info(msg="Build optimizer", level="INFO", state=True, logger=logger):
+        logger.raise_error(AttributeError, "Configurations for the expected optimizer %s is required" % cfg.optim.optim)
+    with logger.log_info(msg="Build optimizer", level="INFO", state=True, logger=logger):
         optimizer = OPTIMIZER[cfg.optim.optim](cfg, model)
     return optimizer

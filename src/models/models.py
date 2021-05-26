@@ -13,7 +13,7 @@ import torch, torchvision
 from torch import nn
 import torch.nn.functional as F
 
-from utils import utils
+from utils.logger import logger
 from .encoder import ENCODER
 from .decoder import DECODER
 
@@ -38,7 +38,7 @@ class Model(nn.Module):
 
 
 
-def build_model(cfg, logger=None):
-    with utils.log_info(msg="Build model from configurations.", state=True, logger=logger):
+def build_model(cfg):
+    with logger.log_info(msg="Build model from configurations.", state=True, logger=logger):
         model = Model(cfg)
     return model

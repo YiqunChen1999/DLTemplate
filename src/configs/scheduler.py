@@ -7,7 +7,7 @@ Author:
 """
 
 from alphaconfig import AlphaConfig
-from args import args
+from .args import args
 
 scheduler = AlphaConfig()
 

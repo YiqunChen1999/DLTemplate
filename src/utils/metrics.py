@@ -48,12 +48,12 @@ class MetricsHandler:
         self._items_ = []
         for m in metrics:
             if m not in METRICS.keys():
-                utils.raise_error(NotImplementedError, "Handler of metric {} is not in implemented metrics set {}".format(m, _METRICS_))
+                logger.raise_error(NotImplementedError, "Handler of metric {} is not in implemented metrics set {}".format(m, _METRICS_))
             self._items_.append(m)
 
     def register(self, metric):
         if m not in METRICS.keys():
-            utils.raise_error(NotImplementedError, "Handler of metric {} is not in implemented metrics set {}".format(m, _METRICS_))
+            logger.raise_error(NotImplementedError, "Handler of metric {} is not in implemented metrics set {}".format(m, _METRICS_))
         self._items_.append(m)
 
     def update(self, dataset, phase, epoch, metric, value):

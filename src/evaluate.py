@@ -16,6 +16,7 @@ from tqdm import tqdm
 import numpy as np
 
 from utils import utils, metrics
+from utils.logger import logger
 
 @torch.no_grad()
 def evaluate(
@@ -35,7 +36,7 @@ def evaluate(
     model.eval()
     # Read data and evaluate and record info.
     msg="{} at epoch: {}".format(phase.upper(), str(epoch).zfill(3))
-    with utils.log_info(msg=msg, level="INFO", state=True, logger=logger):
+    with logger.log_info(msg=msg, level="INFO", state=True, logger=logger):
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
             outputs, targets, loss = utils.infer_and_calc_loss(

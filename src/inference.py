@@ -16,6 +16,7 @@ import numpy as np
 from tqdm import tqdm
 
 from utils import utils, metrics
+from utils.logger import logger
 
 @torch.no_grad()
 def inference(
@@ -30,7 +31,7 @@ def inference(
 ):
     model.eval()
     # Read data and evaluate and record info.
-    with utils.log_info(msg="Inference", level="INFO", state=True, logger=logger):
+    with logger.log_info(msg="Inference", level="INFO", state=True, logger=logger):
         pbar = tqdm(total=len(data_loader), dynamic_ncols=True)
         for idx, data in enumerate(data_loader):
             outputs, *_ = utils.infer(model=model, data=data, device=device, infer_version=cfg.gnrl.infer, infer_only=True, *args, **kwargs)

@@ -8,11 +8,11 @@ Docs:
 import os, sys, copy
 from alphaconfig import AlphaConfig
 
-from args import args
-from optim import optim
-from dataset import data
-from loss_fn import loss_fn
-from scheduler import scheduler
+from .args import args
+from .optim import optim
+from .dataset import data
+from .loss_fn import loss_fn
+from .scheduler import scheduler
 
 configs = AlphaConfig()
 cfg = configs
@@ -24,7 +24,7 @@ cfg.gnrl.root                                   =   os.path.join(os.getcwd(), ".
 cfg.gnrl.id                                     =   "{}".format(args.id)
 cfg.gnrl.batch                                  =   args.batch_size
 cfg.gnrl.resume                                 =   True if args.resume == "true" else False
-cfg.gnrl.cuda                                   =   eval(args.gpu)
+cfg.gnrl.cuda                                   =   eval(args.cuda)
 cfg.gnrl.ckphs                                  =   range(int(args.max_epoch*0.6), args.max_epoch, int(args.max_epoch*0.1))
 cfg.gnrl.infer                                  =   "0"
 

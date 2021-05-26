@@ -49,12 +49,13 @@ def notify(msg="", level="INFO", logger=None, fp=None):
 
 @contextlib.contextmanager
 def log_info(msg="", level="INFO", state=False, logger=None):
-    _state = "[" + colored("{:<8}".format("RUNNING"), "green") + "]" if state else ""
-    notify(msg="{} {}".format(_state, msg), level=level, logger=logger)
+    log_fn = print if logger is None else logger.log_info
+    state_info = "[" + colored("{:<8}".format("RUNNING"), "green") + "]" if state else ""
+    notify(msg="{} {}".format(state_info, msg), level=level, logger=logger)
     yield
     if state:
-        _state = "[" + colored("{:<8}".format("DONE"), "green") + "]" if state else ""
-        notify(msg="{} {}".format(_state, msg), level=level, logger=logger)
+        state_info = "[" + colored("{:<8}".format("DONE"), "green") + "]" if state else ""
+        notify(msg="{} {}".format(state_info, msg), level=level, logger=logger)
 
 
 inform = notify
@@ -123,7 +124,7 @@ def calc_psnr(img1, img2, data_range, *args, **kwargs):
 def calc_ssim(im1, im2, data_range, multichannel=True, *args, **kwargs):
     def calc_ssim_pt(im1, im2, data_range, multichannel=True, *args, **kwargs):
         if not im1.shape == im2.shape:
-            utils.raise_error(AttributeError, "Shapes of im1 and im2 are not equal.")
+            logger.raise_error(AttributeError, "Shapes of im1 and im2 are not equal.")
         device = kwargs.pop("device", torch.device("cpu"))
         if len(im1.shape) == 3:
             im1 = im1.unsqueeze(0)
@@ -652,15 +653,26 @@ def check_env(cfg, logger=None):
     
 
 if __name__ == "__main__":
-    log_info(msg="Hello", level="INFO", state=False, logger=None)
-    total_time = 0
-    for idx in range(10000):
-        start_time = time.time()
-        smap = gen_spatial_map(12, 8, 512, 512)
-        total_time += time.time() - start_time
-        if idx < 10:
-            print(smap.shape)
-            print(total_time)
-    print(total_time)
-    print(gen_spatial_map.cache_info())
+    # log_info(msg="Hello", level="INFO", state=False, logger=None)
+    # total_time = 0
+    # for idx in range(10000):
+    #     start_time = time.time()
+    #     smap = gen_spatial_map(12, 8, 512, 512)
+    #     total_time += time.time() - start_time
+    #     if idx < 10:
+    #         print(smap.shape)
+    #         print(total_time)
+    # print(total_time)
+    # print(gen_spatial_map.cache_info())
+    import logging
+    logging.basicConfig(
+        level=logging.INFO, 
+        format="[%(asctime)s] [%(filename)-20s: %(lineno)-4d] [%(levelname)-10s] %(message)s",
+        handlers=[
+            # logging.FileHandler(filename=self.path2logfile, mode='a'),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger()
+    logger.info(colored("hello world", "green"))
     

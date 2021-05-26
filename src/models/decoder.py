@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import utils
+from utils.logger import logger
 from .modules import (
     AsymmCrossAttnV1, 
     AsymmCrossAttnV2, 
@@ -40,10 +41,10 @@ class Decoder(torch.nn.Module):
         self._build_()
 
     def _build_(self):
-        utils.raise_error(NotImplementedError, "Decoder is not implemented")
+        logger.raise_error(NotImplementedError, "Decoder is not implemented")
 
     def forward(self, inp, *args, **kwargs):
-        utils.raise_error(NotImplementedError, "Decoder is not implemented")
+        logger.raise_error(NotImplementedError, "Decoder is not implemented")
         return out
 
 

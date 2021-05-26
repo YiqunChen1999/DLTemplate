@@ -18,6 +18,7 @@ from transformers import BertTokenizer, BertModel
 from tqdm import tqdm
 
 from utils import utils
+from utils.logger import logger
 
 DATASET = {}
 
@@ -37,10 +38,10 @@ class Dataset(BaseDataset):
         self.items = []
 
     def _build_(self):
-        utils.raise_error(NotImplementedError, "Dataset is not implemented")
+        logger.raise_error(NotImplementedError, "Dataset is not implemented")
 
     def __getitem__(self, idx):
-        utils.raise_error(NotImplementedError, "Dataset is not implemented")
+        logger.raise_error(NotImplementedError, "Dataset is not implemented")
 
 
 class BaseDataset(torch.utils.data.Dataset):
@@ -51,7 +52,7 @@ class BaseDataset(torch.utils.data.Dataset):
     def __init__(self, cfg, split, dataset, *args, **kwargs):
         super(BaseDataset, self).__init__()
         if not split in ["train", "valid", "test"]:
-            utils.raise_error(ValueError, "Unknown split %s" % split)
+            logger.raise_error(ValueError, "Unknown split %s" % split)
         self.cfg = cfg
         self.split = split
         self.dataset = dataset
@@ -60,7 +61,7 @@ class BaseDataset(torch.utils.data.Dataset):
 
     def _build_(self):
         self.items = []
-        utils.raise_error(NotImplementedError, "Dataset is not implemeted yet.")
+        logger.raise_error(NotImplementedError, "Dataset is not implemeted yet.")
         self.update()
 
     def update(self):
@@ -76,7 +77,7 @@ class BaseDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         item = self.items[self.random_indexes[idx]]
-        utils.raise_error(NotImplementedError, "Dataset is not implemeted yet.")
+        logger.raise_error(NotImplementedError, "Dataset is not implemeted yet.")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from . import utils
+from .logger import logger
 
 SCHEDULER = {}
 
@@ -103,7 +104,7 @@ class LinearLRScheduler:
             else:
                 param_group["lr"] = round(self.lr_info[idx]["init_lr"] - (self.epoch-self.warmup) * self.lr_info[idx]["delta_lr"], 9)
             if param_group["lr"] < 0:
-                utils.raise_error(ValueError, "Expect positive learning rate but got {}".format(param_group["lr"]))
+                logger.raise_error(ValueError, "Expect positive learning rate but got {}".format(param_group["lr"]))
         self.epoch += 1
 
     def step(self):
@@ -133,5 +134,5 @@ class LinearLRScheduler:
 
 
 def build_scheduler(cfg, optimizer, logger=None, *args, **kwargs):
-    with utils.log_info(msg="Build learning rate scheduler", level="INFO", state=True, logger=logger):
+    with logger.log_info(msg="Build learning rate scheduler", level="INFO", state=True, logger=logger):
         return SCHEDULER[cfg.scheduler.scheduler](cfg, optimizer, *args, **kwargs)

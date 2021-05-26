@@ -35,7 +35,7 @@ def main():
     # Read checkpoint.
     ckpt = torch.load(cfg.model.path2ckpt) if cfg.gnrl.resume else {}
     if cfg.gnrl.resume:
-        with utils.log_info(msg="Load pre-trained model.", level="INFO", state=True, logger=logger):
+        with logger.log_info(msg="Load pre-trained model.", level="INFO", state=True, logger=logger):
             model.load_state_dict(ckpt["model"])
             optimizer.load_state_dict(ckpt["optimizer"])
             lr_scheduler.load_state_dict(ckpt["lr_scheduler"])

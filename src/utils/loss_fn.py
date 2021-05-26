@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.fft
 
-from utils import utils
+from utils.logger import logger
 from utils import metrics
 
 LOSS_FN = {}
@@ -121,8 +121,8 @@ class MyLossFn:
         return self.calc_loss(out, target)
 
 
-def build_loss_fn(cfg, logger=None, *args, **kwargs):
-    with utils.log_info(msg="Build loss function", level="INFO", state=True, logger=logger):
+def build_loss_fn(cfg, *args, **kwargs):
+    with logger.log_info(msg="Build loss function", level="INFO", state=True, logger=logger):
         loss_fn = LOSS_FN[cfg.loss_fn.loss_fn](cfg, *args, **kwargs)
     return loss_fn
 
